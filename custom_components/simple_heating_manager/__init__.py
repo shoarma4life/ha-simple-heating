@@ -67,18 +67,18 @@ class Room:
         self.previous_temperature: float | None = None
         self.last_pushed_temp: float | None = None
 
-    def update(self) -> None:
+    async def async_update(self) -> None:
         """Main update cycle for this room."""
         try:
             windows_open = self._check_windows()
 
             if windows_open and not self.window_open:
-                self._handle_window_opened()
+                await self._async_handle_window_opened()
             elif not windows_open and self.window_open:
-                self._handle_window_closed()
+                await self._async_handle_window_closed()
 
             if not windows_open:
-                self.push_external_temp()
+                await self.async_push_external_temp()
 
         except Exception:
             _LOGGER.exception("Error updating room '%s'", self.name)
@@ -103,7 +103,7 @@ class Room:
                 )
         return False
 
-    def _handle_window_opened(self) -> None:
+    async def _async_handle_window_opened(self) -> None:
         """Handle window opening: save state and turn off TRV."""
         _LOGGER.info(
             "Room '%s': window opened, turning off heating", self.name
@@ -126,7 +126,7 @@ class Room:
             self.previous_temperature = None
 
         try:
-            self.hass.services.call(
+            await self.hass.services.async_call(
                 "climate",
                 "set_hvac_mode",
                 {"entity_id": self.trv_entity, "hvac_mode": "off"},
@@ -137,11 +137,11 @@ class Room:
             )
 
         self.window_open = True
-        self._send_notification(
+        await self._async_send_notification(
             f"Room '{self.name}': window opened, heating turned off."
         )
 
-    def _handle_window_closed(self) -> None:
+    async def _async_handle_window_closed(self) -> None:
         """Handle window closing: restore previous TRV state."""
         _LOGGER.info(
             "Room '%s': window closed, restoring heating", self.name
@@ -151,14 +151,14 @@ class Room:
             mode = self.previous_hvac_mode
             if not mode or mode == "off":
                 mode = "heat"
-            self.hass.services.call(
+            await self.hass.services.async_call(
                 "climate",
                 "set_hvac_mode",
                 {"entity_id": self.trv_entity, "hvac_mode": mode},
             )
 
             if self.previous_temperature is not None:
-                self.hass.services.call(
+                await self.hass.services.async_call(
                     "climate",
                     "set_temperature",
                     {
@@ -175,11 +175,11 @@ class Room:
         self.previous_hvac_mode = None
         self.previous_temperature = None
 
-        self._send_notification(
+        await self._async_send_notification(
             f"Room '{self.name}': window closed, heating restored."
         )
 
-    def push_external_temp(self) -> None:
+    async def async_push_external_temp(self) -> None:
         """Push external sensor temperature directly to TRV.
 
         Reads the external temperature sensor and writes the value to
@@ -220,7 +220,7 @@ class Room:
         )
 
         try:
-            self.hass.services.call(
+            await self.hass.services.async_call(
                 "number",
                 "set_value",
                 {"entity_id": self.ext_temp_entity, "value": temp},
@@ -233,7 +233,7 @@ class Room:
                 self.ext_temp_entity,
             )
 
-    def _send_notification(self, message: str) -> None:
+    async def _async_send_notification(self, message: str) -> None:
         """Send a notification via the configured notification service."""
         try:
             parts = self.notification_service.rsplit(".", 1)
@@ -245,7 +245,7 @@ class Room:
                 )
                 return
             domain, service = parts
-            self.hass.services.call(
+            await self.hass.services.async_call(
                 domain,
                 service,
                 {"title": "Heating Manager", "message": message},
@@ -288,7 +288,9 @@ class Room:
             self.needs_heat = False
 
 
-def _update_cv_switches(hass: HomeAssistant, entry: ConfigEntry, rooms: list[Room]) -> None:
+async def _async_update_cv_switches(
+    hass: HomeAssistant, entry: ConfigEntry, rooms: list[Room]
+) -> None:
     """Update CV boiler switches based on heat demand across all rooms."""
     any_needs_heat = any(r.needs_heat for r in rooms)
 
@@ -308,14 +310,14 @@ def _update_cv_switches(hass: HomeAssistant, entry: ConfigEntry, rooms: list[Roo
 
             if any_needs_heat and not is_on:
                 _LOGGER.info("CV switch %s: turning ON (heat demanded)", switch_entity)
-                hass.services.call(
+                await hass.services.async_call(
                     domain, "turn_on", {"entity_id": switch_entity}
                 )
             elif not any_needs_heat and is_on:
                 _LOGGER.info(
                     "CV switch %s: turning OFF (no room needs heat)", switch_entity
                 )
-                hass.services.call(
+                await hass.services.async_call(
                     domain, "turn_off", {"entity_id": switch_entity}
                 )
         except Exception:
@@ -336,13 +338,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Trigger on external sensor state change (immediate)
         def make_sensor_handler(r: Room):
-            def _handle_sensor_change(event: Event) -> None:
+            async def _handle_sensor_change(event: Event) -> None:
                 new_state = event.data.get("new_state")
                 if new_state is None or new_state.state in ("unknown", "unavailable"):
                     return
-                r.push_external_temp()
+                await r.async_push_external_temp()
                 r.check_heat_demand()
-                _update_cv_switches(hass, entry, rooms)
+                await _async_update_cv_switches(hass, entry, rooms)
             return _handle_sensor_change
 
         unsub = async_track_state_change_event(
@@ -352,10 +354,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
         # Periodic fallback for window checks and CV switch updates
         def make_update(r: Room):
-            def _update(_now=None):
-                r.update()
+            async def _update(_now=None):
+                await r.async_update()
                 r.check_heat_demand()
-                _update_cv_switches(hass, entry, rooms)
+                await _async_update_cv_switches(hass, entry, rooms)
             return _update
 
         cancel = async_track_time_interval(
