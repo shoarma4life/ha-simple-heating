@@ -232,7 +232,27 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                 )
                 return self.async_create_entry(title="", data={})
 
-            room_data = {k: v for k, v in user_input.items() if k != "delete_room"}
+            # Push sensor mode to external if requested
+            if user_input.get("push_sensor_mode"):
+                trv_name = room.get(CONF_TRV_ENTITY, "").split(".", 1)[-1]
+                sensor_mode_entity = f"select.{trv_name}_sensor"
+                try:
+                    await self.hass.services.async_call(
+                        "select",
+                        "select_option",
+                        {
+                            "entity_id": sensor_mode_entity,
+                            "option": "external",
+                        },
+                    )
+                except Exception:
+                    pass
+
+            room_data = {
+                k: v
+                for k, v in user_input.items()
+                if k not in ("delete_room", "push_sensor_mode")
+            }
             new_name = room_data[CONF_ROOM_NAME]
             existing_names = [
                 r[CONF_ROOM_NAME]
@@ -248,6 +268,36 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                     self._config_entry, data=new_data
                 )
                 return self.async_create_entry(title="", data={})
+
+        # Read current temperatures for display
+        trv_entity = room.get(CONF_TRV_ENTITY, "")
+        temp_sensor = room.get(CONF_TEMP_SENSOR, "")
+        trv_name = trv_entity.split(".", 1)[-1] if trv_entity else ""
+        sensor_mode_entity = f"select.{trv_name}_sensor"
+
+        trv_state = self.hass.states.get(trv_entity)
+        trv_temp = "?"
+        trv_target = "?"
+        if trv_state is not None:
+            current = trv_state.attributes.get("current_temperature")
+            target = trv_state.attributes.get("temperature")
+            if current is not None:
+                trv_temp = f"{current}°C"
+            if target is not None:
+                trv_target = f"{target}°C"
+
+        sensor_state = self.hass.states.get(temp_sensor)
+        sensor_temp = "?"
+        if sensor_state is not None and sensor_state.state not in (
+            "unknown",
+            "unavailable",
+        ):
+            sensor_temp = f"{sensor_state.state}°C"
+
+        sensor_mode_state = self.hass.states.get(sensor_mode_entity)
+        sensor_mode = "?"
+        if sensor_mode_state is not None:
+            sensor_mode = sensor_mode_state.state
 
         schema = vol.Schema(
             {
@@ -285,11 +335,22 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                     )
                 ),
                 vol.Optional(
+                    "push_sensor_mode", default=False
+                ): selector.BooleanSelector(),
+                vol.Optional(
                     "delete_room", default=False
                 ): selector.BooleanSelector(),
             }
         )
 
         return self.async_show_form(
-            step_id="edit_room", data_schema=schema, errors=errors
+            step_id="edit_room",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={
+                "trv_temp": trv_temp,
+                "trv_target": trv_target,
+                "sensor_temp": sensor_temp,
+                "sensor_mode": sensor_mode,
+            },
         )

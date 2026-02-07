@@ -63,13 +63,14 @@
       },
       "edit_room": {
         "title": "Edit room",
-        "description": "Edit room settings or delete this room.",
+        "description": "TRV temperature: {trv_temp} (target: {trv_target})\nExternal sensor: {sensor_temp}\nSensor mode: {sensor_mode}",
         "data": {
           "name": "Room name",
           "trv_entity": "TRV (climate entity)",
           "temp_sensor": "External temperature sensor",
           "window_sensors": "Window sensors",
           "check_interval": "Check interval (seconds)",
+          "push_sensor_mode": "Push sensor mode to external",
           "delete_room": "Delete this room"
         },
         "data_description": {
@@ -78,6 +79,7 @@
           "temp_sensor": "External temperature sensor to push to the TRV.",
           "window_sensors": "Binary sensors that detect open windows.",
           "check_interval": "How often to check windows and update CV switch (in seconds).",
+          "push_sensor_mode": "Enable to force the TRV sensor mode to 'external' now.",
           "delete_room": "Enable to permanently remove this room."
         }
       }
