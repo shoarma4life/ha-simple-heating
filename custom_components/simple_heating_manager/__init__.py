@@ -1,6 +1,10 @@
 """Simple Heating Manager - HACS custom integration.
 
-Manages heating per room with TRV calibration and window detection.
+Manages heating per room:
+- Pushes external temperature sensor reading to TRV (offset calibration)
+- Controls CV boiler switch based on TRV heat demand
+- Window detection: turns off TRV when window opens, restores when closed
+
 Each config entry represents one room.
 """
 
@@ -14,19 +18,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
-    CONF_CALIBRATION_MODE,
     CONF_CHECK_INTERVAL,
     CONF_CV_SWITCH,
     CONF_NAME,
     CONF_NOTIFICATION_SERVICE,
-    CONF_TARGET_TEMP,
     CONF_TEMP_SENSOR,
     CONF_TRV_ENTITY,
     CONF_WINDOW_SENSORS,
-    DEFAULT_CALIBRATION_MODE,
     DEFAULT_CHECK_INTERVAL,
     DEFAULT_NOTIFICATION_SERVICE,
-    DEFAULT_TARGET_TEMP,
     DOMAIN,
 )
 
@@ -45,16 +45,10 @@ class Room:
         self.trv_entity: str = entry.data[CONF_TRV_ENTITY]
         self.temp_sensor: str = entry.data[CONF_TEMP_SENSOR]
         self.window_sensors: list[str] = entry.data.get(CONF_WINDOW_SENSORS, []) or []
-        self.calibration_mode: str = entry.data.get(
-            CONF_CALIBRATION_MODE, DEFAULT_CALIBRATION_MODE
-        )
-        self.target_temperature: float = entry.data.get(
-            CONF_TARGET_TEMP, DEFAULT_TARGET_TEMP
-        )
+        self.cv_switch: str | None = entry.data.get(CONF_CV_SWITCH)
         self.notification_service: str = entry.data.get(
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
-        self.cv_switch: str | None = entry.data.get(CONF_CV_SWITCH)
 
         self.window_open: bool = False
         self.needs_heat: bool = False
@@ -73,7 +67,7 @@ class Room:
                 self._handle_window_closed()
 
             if not windows_open:
-                self._calibrate()
+                self._push_external_temp()
 
         except Exception:
             _LOGGER.exception("Error updating room '%s'", self.name)
@@ -174,11 +168,13 @@ class Room:
             f"Room '{self.name}': window closed, heating restored."
         )
 
-    def _calibrate(self) -> None:
-        """Perform TRV calibration based on external temperature sensor."""
-        if self.calibration_mode == "none":
-            return
+    def _push_external_temp(self) -> None:
+        """Push external sensor temperature to TRV as calibration offset.
 
+        Calculates offset = external_temp - trv_internal_temp and writes it
+        to the TRV's local_temperature_calibration entity so the TRV knows
+        the real room temperature and can decide itself when to heat.
+        """
         # Read external temperature
         try:
             ext_state = self.hass.states.get(self.temp_sensor)
@@ -222,19 +218,6 @@ class Room:
             )
             return
 
-        if self.calibration_mode == "offset":
-            self._calibrate_offset(external_temp, trv_internal_temp)
-        elif self.calibration_mode == "target_temp":
-            self._calibrate_target_temp(external_temp, trv_internal_temp)
-
-    def _calibrate_offset(
-        self, external_temp: float, trv_internal_temp: float
-    ) -> None:
-        """Calibrate using offset mode.
-
-        Calculates the difference between external and TRV internal temperature
-        and sets it as the calibration offset on the TRV's offset entity.
-        """
         offset = round(external_temp - trv_internal_temp, 1)
 
         if offset == self.last_calibration_offset:
@@ -262,7 +245,7 @@ class Room:
             self.hass.services.call(
                 "number",
                 "set_value",
-                {"entity_id": offset_entity, "value": round(offset, 1)},
+                {"entity_id": offset_entity, "value": offset},
             )
             self.last_calibration_offset = offset
         except Exception:
@@ -270,47 +253,6 @@ class Room:
                 "Room '%s': error setting calibration offset on %s",
                 self.name,
                 offset_entity,
-            )
-
-    def _calibrate_target_temp(
-        self, external_temp: float, trv_internal_temp: float
-    ) -> None:
-        """Calibrate using target temperature mode.
-
-        Adjusts the TRV target temperature to compensate for the difference
-        between external and TRV internal temperature readings.
-
-        Example: desired 21C, external reads 19C, TRV reads 21C
-        -> delta = 19 - 21 = -2
-        -> adjusted_target = 21 - (-2) = 23C (TRV heats more)
-        """
-        if self.target_temperature is None:
-            return
-
-        delta = external_temp - trv_internal_temp
-        adjusted_target = round(self.target_temperature - delta, 1)
-
-        _LOGGER.info(
-            "Room '%s': target_temp calibration: desired=%.1f, "
-            "external=%.1f, trv_internal=%.1f, delta=%.1f, adjusted=%.1f",
-            self.name,
-            self.target_temperature,
-            external_temp,
-            trv_internal_temp,
-            delta,
-            adjusted_target,
-        )
-
-        try:
-            self.hass.services.call(
-                "climate",
-                "set_temperature",
-                {"entity_id": self.trv_entity, "temperature": adjusted_target},
-            )
-        except Exception:
-            _LOGGER.exception(
-                "Room '%s': error setting adjusted target temperature",
-                self.name,
             )
 
     def _send_notification(self, message: str) -> None:
@@ -384,7 +326,6 @@ def _update_cv_switches(hass: HomeAssistant) -> None:
         room: Room = entry_data["room"]
         if not room.cv_switch:
             continue
-        # If any room needs heat, the switch should be on
         if room.cv_switch not in switch_demand:
             switch_demand[room.cv_switch] = False
         if room.needs_heat:

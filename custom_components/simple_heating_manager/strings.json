@@ -3,16 +3,18 @@
     "step": {
       "user": {
         "title": "Add room",
-        "description": "Configure the basic settings for this room.",
+        "description": "Select the boiler switch (shared across all rooms) and configure this room.",
         "data": {
+          "cv_switch": "Boiler switch",
           "name": "Room name",
           "trv_entity": "TRV (climate entity)",
           "temp_sensor": "External temperature sensor"
         },
         "data_description": {
+          "cv_switch": "Switch that controls the boiler. Shared across all rooms — stays on as long as any room needs heat.",
           "name": "A unique name for this room (e.g. Living Room).",
           "trv_entity": "The climate entity of the TRV to control.",
-          "temp_sensor": "An external temperature sensor for accurate readings."
+          "temp_sensor": "An external temperature sensor used to push the real room temperature to the TRV."
         }
       },
       "options": {
@@ -20,18 +22,12 @@
         "description": "Configure optional settings for this room.",
         "data": {
           "window_sensors": "Window sensors",
-          "cv_switch": "Boiler switch",
-          "calibration_mode": "Calibration mode",
-          "target_temperature": "Desired temperature",
           "check_interval": "Check interval (seconds)",
           "notification_service": "Notification service"
         },
         "data_description": {
           "window_sensors": "Binary sensors that detect open windows. Heating is turned off when any sensor reports open.",
-          "cv_switch": "Switch that controls the boiler. Turned on when heat is needed, turned off only when no room needs heat.",
-          "calibration_mode": "How to compensate for TRV temperature inaccuracy.",
-          "target_temperature": "The desired room temperature (used in target_temp calibration mode).",
-          "check_interval": "How often to check sensors and calibrate (in seconds).",
+          "check_interval": "How often to check sensors and update the TRV (in seconds).",
           "notification_service": "Service to call for notifications (e.g. persistent_notification.create)."
         }
       }
@@ -49,19 +45,15 @@
         "title": "Room options",
         "description": "Update settings for this room.",
         "data": {
-          "window_sensors": "Window sensors",
           "cv_switch": "Boiler switch",
-          "calibration_mode": "Calibration mode",
-          "target_temperature": "Desired temperature",
+          "window_sensors": "Window sensors",
           "check_interval": "Check interval (seconds)",
           "notification_service": "Notification service"
         },
         "data_description": {
+          "cv_switch": "Switch that controls the boiler. Shared across all rooms — stays on as long as any room needs heat.",
           "window_sensors": "Binary sensors that detect open windows. Heating is turned off when any sensor reports open.",
-          "cv_switch": "Switch that controls the boiler. Turned on when heat is needed, turned off only when no room needs heat.",
-          "calibration_mode": "How to compensate for TRV temperature inaccuracy.",
-          "target_temperature": "The desired room temperature (used in target_temp calibration mode).",
-          "check_interval": "How often to check sensors and calibrate (in seconds).",
+          "check_interval": "How often to check sensors and update the TRV (in seconds).",
           "notification_service": "Service to call for notifications (e.g. persistent_notification.create)."
         }
       }
