@@ -1,0 +1,68 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Simple Heating Manager",
+        "description": "Configure your boiler switches and notification service. Rooms can be added after setup via Configure.",
+        "data": {
+          "cv_switch_1": "Boiler switch 1",
+          "cv_switch_2": "Boiler switch 2",
+          "notification_service": "Notification service"
+        },
+        "data_description": {
+          "cv_switch_1": "Primary switch that controls the boiler.",
+          "cv_switch_2": "Optional secondary boiler switch.",
+          "notification_service": "Service for notifications (e.g. persistent_notification.create)."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Simple Heating Manager is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "menu_options": {
+          "settings": "Edit settings",
+          "add_room": "Add a room"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Edit global settings.",
+        "data": {
+          "cv_switch_1": "Boiler switch 1",
+          "cv_switch_2": "Boiler switch 2",
+          "notification_service": "Notification service"
+        },
+        "data_description": {
+          "cv_switch_1": "Primary switch that controls the boiler.",
+          "cv_switch_2": "Optional secondary boiler switch.",
+          "notification_service": "Service for notifications."
+        }
+      },
+      "add_room": {
+        "title": "Add room",
+        "description": "Configure a new room.",
+        "data": {
+          "name": "Room name",
+          "trv_entity": "TRV (climate entity)",
+          "temp_sensor": "External temperature sensor",
+          "window_sensors": "Window sensors",
+          "check_interval": "Check interval (seconds)"
+        },
+        "data_description": {
+          "name": "A unique name for this room.",
+          "trv_entity": "The climate entity of the TRV to control.",
+          "temp_sensor": "External temperature sensor to push to the TRV.",
+          "window_sensors": "Binary sensors that detect open windows.",
+          "check_interval": "How often to check windows and update CV switch (in seconds)."
+        }
+      }
+    },
+    "error": {
+      "room_already_exists": "A room with this name already exists."
+    }
+  }
+}
