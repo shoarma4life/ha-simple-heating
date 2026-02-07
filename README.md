@@ -48,10 +48,22 @@ After setup you can change options by clicking **Configure** on the integration 
 | Calibration mode | `target_temp`, `offset`, or `none` | `target_temp` |
 | Desired temperature | Target room temperature (for target_temp mode) | `21.0 °C` |
 | Check interval | How often to check and calibrate (seconds) | `30` |
+| Boiler switch | Switch/input_boolean that controls the boiler | _(none)_ |
 | Notification service | Service for notifications | `persistent_notification.create` |
+
+### Boiler switch
+
+Each room can optionally reference a switch (or input_boolean) that controls the central heating boiler. The switch is turned **on** when any room needs heat, and only turned **off** when **no room** using that switch needs heat anymore. This prevents the boiler from turning off while other rooms are still heating.
 
 ### Calibration modes
 
 - **Target temperature**: Adjusts the TRV's target temperature to compensate for the difference between the external sensor and the TRV's internal reading. Works with any TRV.
 - **Offset**: Calculates `offset = external_temp - trv_internal_temp` and writes it to the TRV's `local_temperature_calibration` number entity. Best for Zigbee TRVs with offset support.
 - **None**: No calibration, only window detection.
+
+## Repository
+
+This project is maintained in two locations:
+
+- **Source**: https://git.voskuil.cloud/marco/ha-simple-heating
+- **GitHub mirror (for HACS)**: https://github.com/shoarma4life/ha-simple-heating
