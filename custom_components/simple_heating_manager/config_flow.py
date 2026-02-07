@@ -83,10 +83,32 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
         """Show menu: edit settings or add a room."""
-        return self.async_show_menu(
-            step_id="init",
-            menu_options=["settings", "add_room"],
+        if user_input is not None:
+            next_step = user_input.get("next_action")
+            if next_step == "settings":
+                return await self.async_step_settings()
+            if next_step == "add_room":
+                return await self.async_step_add_room()
+
+        schema = vol.Schema(
+            {
+                vol.Required("next_action"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            selector.SelectOptionDict(
+                                value="settings", label="Edit settings"
+                            ),
+                            selector.SelectOptionDict(
+                                value="add_room", label="Add a room"
+                            ),
+                        ],
+                        mode="list",
+                    )
+                ),
+            }
         )
+
+        return self.async_show_form(step_id="init", data_schema=schema)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None

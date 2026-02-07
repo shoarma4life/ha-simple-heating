@@ -23,9 +23,10 @@
   "options": {
     "step": {
       "init": {
-        "menu_options": {
-          "settings": "Edit settings",
-          "add_room": "Add a room"
+        "title": "Simple Heating Manager",
+        "description": "What would you like to do?",
+        "data": {
+          "next_action": "Action"
         }
       },
       "settings": {
