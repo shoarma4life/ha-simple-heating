@@ -352,6 +352,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         unsubs.append(unsub)
 
+        # Trigger on window sensor state change (immediate open/close)
+        if room.window_sensors:
+            def make_window_handler(r: Room):
+                async def _handle_window_change(event: Event) -> None:
+                    new_state = event.data.get("new_state")
+                    if new_state is None or new_state.state in ("unknown", "unavailable"):
+                        return
+                    await r.async_update()
+                    r.check_heat_demand()
+                    await _async_update_cv_switches(hass, entry, rooms)
+                return _handle_window_change
+
+            unsub_win = async_track_state_change_event(
+                hass, room.window_sensors, make_window_handler(room)
+            )
+            unsubs.append(unsub_win)
+
         # Periodic fallback for window checks and CV switch updates
         def make_update(r: Room):
             async def _update(_now=None):
