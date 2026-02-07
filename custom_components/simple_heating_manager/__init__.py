@@ -434,6 +434,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             room.check_interval,
         )
 
+    # Hourly check: verify all TRVs are still set to external sensor mode
+    async def _hourly_sensor_mode_check(_now=None):
+        for r in rooms:
+            r.sensor_mode_set = False
+            await r._async_ensure_external_sensor_mode()
+
+    cancel_hourly = async_track_time_interval(
+        hass, _hourly_sensor_mode_check, timedelta(hours=1)
+    )
+    unsubs.append(cancel_hourly)
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "rooms": rooms,
