@@ -56,11 +56,14 @@ class Room:
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
 
-        # Derive external temp input entity from TRV name
+        # Derive entities from TRV name
         # e.g. climate.trv_badkamer -> number.trv_badkamer_external_temperature_input
+        #                            -> select.trv_badkamer_sensor
         trv_name = self.trv_entity.split(".", 1)[1]
         self.ext_temp_entity: str = f"number.{trv_name}_external_temperature_input"
+        self.sensor_mode_entity: str = f"select.{trv_name}_sensor"
 
+        self.sensor_mode_set: bool = False
         self.window_open: bool = False
         self.needs_heat: bool = False
         self.previous_hvac_mode: str | None = None
@@ -179,6 +182,44 @@ class Room:
             f"Room '{self.name}': window closed, heating restored."
         )
 
+    async def _async_ensure_external_sensor_mode(self) -> None:
+        """Ensure the TRV sensor mode is set to 'external'."""
+        if self.sensor_mode_set:
+            return
+
+        try:
+            state = self.hass.states.get(self.sensor_mode_entity)
+            if state is None:
+                _LOGGER.debug(
+                    "Room '%s': sensor mode entity %s not found, skipping",
+                    self.name,
+                    self.sensor_mode_entity,
+                )
+                self.sensor_mode_set = True
+                return
+
+            if state.state != "external":
+                _LOGGER.info(
+                    "Room '%s': setting %s to 'external'",
+                    self.name,
+                    self.sensor_mode_entity,
+                )
+                await self.hass.services.async_call(
+                    "select",
+                    "select_option",
+                    {
+                        "entity_id": self.sensor_mode_entity,
+                        "option": "external",
+                    },
+                )
+            self.sensor_mode_set = True
+        except Exception:
+            _LOGGER.exception(
+                "Room '%s': error setting sensor mode on %s",
+                self.name,
+                self.sensor_mode_entity,
+            )
+
     async def async_push_external_temp(self) -> None:
         """Push external sensor temperature directly to TRV.
 
@@ -186,6 +227,8 @@ class Room:
         number.{trv_name}_external_temperature_input so the TRV knows
         the real room temperature.
         """
+        await self._async_ensure_external_sensor_mode()
+
         try:
             ext_state = self.hass.states.get(self.temp_sensor)
             if ext_state is None or ext_state.state in ("unknown", "unavailable"):
