@@ -445,6 +445,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     unsubs.append(cancel_hourly)
 
+    # Run sensor mode check + initial temp push immediately at startup
+    for room in rooms:
+        await room._async_ensure_external_sensor_mode()
+        await room.async_push_external_temp()
+
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "rooms": rooms,
