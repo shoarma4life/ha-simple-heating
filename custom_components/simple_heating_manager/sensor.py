@@ -6,13 +6,14 @@ under the integration hub.
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
-
-from datetime import timedelta
 
 from .const import DOMAIN
 
@@ -28,7 +29,7 @@ async def async_setup_entry(
 
     entities = []
     for room in rooms:
-        entities.append(RoomStatusSensor(hass, entry, room))
+        entities.append(RoomStatusSensor(entry, room))
 
     async_add_entities(entities)
 
@@ -39,19 +40,18 @@ class RoomStatusSensor(SensorEntity):
     _attr_has_entity_name = True
     _attr_icon = "mdi:thermostat"
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry: ConfigEntry, room) -> None:
         """Initialize the sensor."""
         self._room = room
-        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{room.name}_status"
         self._attr_name = "Status"
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, f"{entry.entry_id}_{room.name}")},
-            "name": room.name,
-            "manufacturer": "Simple Heating Manager",
-            "model": "Room",
-            "via_device": (DOMAIN, entry.entry_id),
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, f"{entry.entry_id}_{room.name}")},
+            name=room.name,
+            manufacturer="Simple Heating Manager",
+            model="Room",
+            entry_type=None,
+        )
         self._unsub = None
 
     async def async_added_to_hass(self) -> None:
@@ -91,12 +91,19 @@ class RoomStatusSensor(SensorEntity):
                 attrs["trv_temperature"] = current
             if target is not None:
                 attrs["trv_target"] = target
-            attrs["hvac_action"] = trv_state.attributes.get("hvac_action", trv_state.state)
+            attrs["hvac_action"] = trv_state.attributes.get(
+                "hvac_action", trv_state.state
+            )
 
         sensor_state = self.hass.states.get(room.temp_sensor)
-        if sensor_state is not None and sensor_state.state not in ("unknown", "unavailable"):
+        if sensor_state is not None and sensor_state.state not in (
+            "unknown",
+            "unavailable",
+        ):
             try:
-                attrs["external_temperature"] = round(float(sensor_state.state), 1)
+                attrs["external_temperature"] = round(
+                    float(sensor_state.state), 1
+                )
             except (ValueError, TypeError):
                 pass
 
