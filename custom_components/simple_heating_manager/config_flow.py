@@ -43,7 +43,6 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         """Step 1: Global settings — CV switches and notifications."""
         if user_input is not None:
-            # Only one instance of the integration allowed
             await self.async_set_unique_id(DOMAIN)
             self._abort_if_unique_id_configured()
 
@@ -74,29 +73,30 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
 
 
 class SimpleHeatingManagerOptionsFlow(OptionsFlow):
-    """Handle options flow — edit global settings and manage rooms."""
+    """Handle options flow — menu with settings and add room."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
         """Initialize options flow."""
         self._config_entry = config_entry
-        self._room_input: dict[str, Any] = {}
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Main options menu — global settings + add room button."""
-        if user_input is not None:
-            action = user_input.pop("action", None)
+        """Show menu: edit settings or add a room."""
+        return self.async_show_menu(
+            step_id="init",
+            menu_options=["settings", "add_room"],
+        )
 
-            # Update global settings
+    async def async_step_settings(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit global settings."""
+        if user_input is not None:
             new_data = {**self._config_entry.data, **user_input}
             self.hass.config_entries.async_update_entry(
                 self._config_entry, data=new_data
             )
-
-            if action == "add_room":
-                return await self.async_step_add_room()
-
             return self.async_create_entry(title="", data={})
 
         current = self._config_entry.data
@@ -125,29 +125,18 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                         CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
                     ),
                 ): selector.TextSelector(),
-                vol.Optional("action"): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value="add_room", label="Add a room"
-                            ),
-                        ],
-                        mode="dropdown",
-                    )
-                ),
             }
         )
 
-        return self.async_show_form(step_id="init", data_schema=schema)
+        return self.async_show_form(step_id="settings", data_schema=schema)
 
     async def async_step_add_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Step to add a new room — TRV, sensor, windows."""
+        """Add a new room."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Check for duplicate room name
             rooms = list(self._config_entry.data.get(CONF_ROOMS, []))
             existing_names = [r[CONF_ROOM_NAME] for r in rooms]
             if user_input[CONF_ROOM_NAME] in existing_names:

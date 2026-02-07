@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Simple Heating Manager",
-        "description": "Configure your boiler switches and notification service. Rooms can be added after setup.",
+        "description": "Configure your boiler switches and notification service. Rooms can be added after setup via Configure.",
         "data": {
           "cv_switch_1": "Boiler switch 1",
           "cv_switch_2": "Boiler switch 2",
@@ -23,19 +23,23 @@
   "options": {
     "step": {
       "init": {
-        "title": "Simple Heating Manager",
-        "description": "Edit global settings or add a room.",
+        "menu_options": {
+          "settings": "Edit settings",
+          "add_room": "Add a room"
+        }
+      },
+      "settings": {
+        "title": "Settings",
+        "description": "Edit global settings.",
         "data": {
           "cv_switch_1": "Boiler switch 1",
           "cv_switch_2": "Boiler switch 2",
-          "notification_service": "Notification service",
-          "action": "Action"
+          "notification_service": "Notification service"
         },
         "data_description": {
           "cv_switch_1": "Primary switch that controls the boiler.",
           "cv_switch_2": "Optional secondary boiler switch.",
-          "notification_service": "Service for notifications.",
-          "action": "Select 'Add a room' to configure a new room."
+          "notification_service": "Service for notifications."
         }
       },
       "add_room": {
@@ -53,7 +57,7 @@
           "trv_entity": "The climate entity of the TRV to control.",
           "temp_sensor": "External temperature sensor to push to the TRV.",
           "window_sensors": "Binary sensors that detect open windows.",
-          "check_interval": "How often to check and update (in seconds)."
+          "check_interval": "How often to check windows and update CV switch (in seconds)."
         }
       }
     },
