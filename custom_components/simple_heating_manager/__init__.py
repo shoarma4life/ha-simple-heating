@@ -56,14 +56,12 @@ class Room:
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
 
-        # Derive entities and MQTT topic from TRV name
+        # Derive entities from TRV name
         # e.g. climate.trv_badkamer -> number.trv_badkamer_external_temperature_input
         #                            -> select.trv_badkamer_sensor
-        #                            -> zigbee2mqtt/trv_badkamer/set
         trv_name = self.trv_entity.split(".", 1)[1]
         self.ext_temp_entity: str = f"number.{trv_name}_external_temperature_input"
         self.sensor_mode_entity: str = f"select.{trv_name}_sensor"
-        self.mqtt_topic: str = f"zigbee2mqtt/{trv_name}/set"
 
         self.sensor_mode_set: bool = False
         self.window_open: bool = False
@@ -185,39 +183,49 @@ class Room:
         )
 
     async def _async_ensure_external_sensor_mode(self) -> None:
-        """Ensure the TRV sensor mode is set to 'external' via MQTT."""
+        """Ensure the TRV sensor mode is set to 'external'."""
         if self.sensor_mode_set:
             return
 
         try:
             state = self.hass.states.get(self.sensor_mode_entity)
-            if state is not None and state.state == "external":
+            if state is None:
+                _LOGGER.warning(
+                    "Room '%s': sensor mode entity %s not found",
+                    self.name,
+                    self.sensor_mode_entity,
+                )
                 self.sensor_mode_set = True
                 return
 
-            await self._async_set_sensor_mode_external()
+            if state.state == "external":
+                _LOGGER.debug(
+                    "Room '%s': sensor mode already 'external'", self.name
+                )
+                self.sensor_mode_set = True
+                return
+
+            _LOGGER.info(
+                "Room '%s': setting %s from '%s' to 'external'",
+                self.name,
+                self.sensor_mode_entity,
+                state.state,
+            )
+            await self.hass.services.async_call(
+                "select",
+                "select_option",
+                {
+                    "entity_id": self.sensor_mode_entity,
+                    "option": "external",
+                },
+            )
             self.sensor_mode_set = True
         except Exception:
             _LOGGER.exception(
-                "Room '%s': error setting sensor mode to external",
+                "Room '%s': error setting sensor mode on %s",
                 self.name,
+                self.sensor_mode_entity,
             )
-
-    async def _async_set_sensor_mode_external(self) -> None:
-        """Set TRV sensor mode to 'external' via direct MQTT publish."""
-        _LOGGER.info(
-            "Room '%s': setting sensor to 'external' via MQTT (%s)",
-            self.name,
-            self.mqtt_topic,
-        )
-        await self.hass.services.async_call(
-            "mqtt",
-            "publish",
-            {
-                "topic": self.mqtt_topic,
-                "payload": '{"sensor": "external"}',
-            },
-        )
 
     async def async_push_external_temp(self) -> None:
         """Push external sensor temperature directly to TRV.
