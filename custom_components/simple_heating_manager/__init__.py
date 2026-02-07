@@ -1,7 +1,7 @@
 """Simple Heating Manager - HACS custom integration.
 
 Manages heating per room:
-- Pushes external temperature sensor reading to TRV (offset calibration)
+- Pushes external temperature to TRV's external_temperature_input entity
 - Controls CV boiler switches based on TRV heat demand
 - Window detection: turns off TRV when window opens, restores when closed
 
@@ -15,8 +15,11 @@ from datetime import timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.core import HomeAssistant
-from homeassistant.helpers.event import async_track_time_interval
+from homeassistant.core import Event, HomeAssistant
+from homeassistant.helpers.event import (
+    async_track_state_change_event,
+    async_track_time_interval,
+)
 
 from .const import (
     CONF_CHECK_INTERVAL,
@@ -53,11 +56,16 @@ class Room:
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
 
+        # Derive external temp input entity from TRV name
+        # e.g. climate.trv_badkamer -> number.trv_badkamer_external_temperature_input
+        trv_name = self.trv_entity.split(".", 1)[1]
+        self.ext_temp_entity: str = f"number.{trv_name}_external_temperature_input"
+
         self.window_open: bool = False
         self.needs_heat: bool = False
         self.previous_hvac_mode: str | None = None
         self.previous_temperature: float | None = None
-        self.last_calibration_offset: float = 0.0
+        self.last_pushed_temp: float | None = None
 
     def update(self) -> None:
         """Main update cycle for this room."""
@@ -70,7 +78,7 @@ class Room:
                 self._handle_window_closed()
 
             if not windows_open:
-                self._push_external_temp()
+                self.push_external_temp()
 
         except Exception:
             _LOGGER.exception("Error updating room '%s'", self.name)
@@ -171,8 +179,13 @@ class Room:
             f"Room '{self.name}': window closed, heating restored."
         )
 
-    def _push_external_temp(self) -> None:
-        """Push external sensor temperature to TRV as calibration offset."""
+    def push_external_temp(self) -> None:
+        """Push external sensor temperature directly to TRV.
+
+        Reads the external temperature sensor and writes the value to
+        number.{trv_name}_external_temperature_input so the TRV knows
+        the real room temperature.
+        """
         try:
             ext_state = self.hass.states.get(self.temp_sensor)
             if ext_state is None or ext_state.state in ("unknown", "unavailable"):
@@ -182,71 +195,42 @@ class Room:
                     self.temp_sensor,
                 )
                 return
-            external_temp = float(ext_state.state)
+            temp = round(float(ext_state.state), 1)
         except (ValueError, TypeError):
             _LOGGER.warning(
-                "Room '%s': could not read external temperature from %s",
+                "Room '%s': could not read temperature from %s",
                 self.name,
                 self.temp_sensor,
             )
             return
 
-        try:
-            trv_state = self.hass.states.get(self.trv_entity)
-            if trv_state is None:
-                _LOGGER.warning(
-                    "Room '%s': TRV %s not found", self.name, self.trv_entity
-                )
-                return
-            trv_internal_temp = trv_state.attributes.get("current_temperature")
-            if trv_internal_temp is None:
-                _LOGGER.warning(
-                    "Room '%s': TRV %s has no current_temperature attribute",
-                    self.name,
-                    self.trv_entity,
-                )
-                return
-            trv_internal_temp = float(trv_internal_temp)
-        except (ValueError, TypeError):
-            _LOGGER.warning(
-                "Room '%s': could not parse TRV internal temperature",
-                self.name,
-            )
-            return
-
-        offset = round(external_temp - trv_internal_temp, 1)
-
-        if offset == self.last_calibration_offset:
+        if temp == self.last_pushed_temp:
             _LOGGER.debug(
-                "Room '%s': offset unchanged (%.1f), skipping",
+                "Room '%s': temp unchanged (%.1f), skipping",
                 self.name,
-                offset,
+                temp,
             )
             return
-
-        trv_name = self.trv_entity.split(".", 1)[1]
-        offset_entity = f"number.{trv_name}_local_temperature_calibration"
 
         _LOGGER.info(
-            "Room '%s': setting offset to %.1f (external=%.1f, trv=%.1f)",
+            "Room '%s': pushing %.1f°C to %s",
             self.name,
-            offset,
-            external_temp,
-            trv_internal_temp,
+            temp,
+            self.ext_temp_entity,
         )
 
         try:
             self.hass.services.call(
                 "number",
                 "set_value",
-                {"entity_id": offset_entity, "value": offset},
+                {"entity_id": self.ext_temp_entity, "value": temp},
             )
-            self.last_calibration_offset = offset
+            self.last_pushed_temp = temp
         except Exception:
             _LOGGER.exception(
-                "Room '%s': error setting calibration offset on %s",
+                "Room '%s': error pushing temp to %s",
                 self.name,
-                offset_entity,
+                self.ext_temp_entity,
             )
 
     def _send_notification(self, message: str) -> None:
@@ -344,12 +328,29 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     global_cfg = dict(entry.data)
 
     rooms: list[Room] = []
-    cancels: list = []
+    unsubs: list = []
 
     for room_cfg in rooms_cfg:
         room = Room(hass, room_cfg, global_cfg)
         rooms.append(room)
 
+        # Trigger on external sensor state change (immediate)
+        def make_sensor_handler(r: Room):
+            def _handle_sensor_change(event: Event) -> None:
+                new_state = event.data.get("new_state")
+                if new_state is None or new_state.state in ("unknown", "unavailable"):
+                    return
+                r.push_external_temp()
+                r.check_heat_demand()
+                _update_cv_switches(hass, entry, rooms)
+            return _handle_sensor_change
+
+        unsub = async_track_state_change_event(
+            hass, [room.temp_sensor], make_sensor_handler(room)
+        )
+        unsubs.append(unsub)
+
+        # Periodic fallback for window checks and CV switch updates
         def make_update(r: Room):
             def _update(_now=None):
                 r.update()
@@ -360,20 +361,21 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         cancel = async_track_time_interval(
             hass, make_update(room), timedelta(seconds=room.check_interval)
         )
-        cancels.append(cancel)
+        unsubs.append(cancel)
 
         _LOGGER.info(
-            "Setting up room '%s' (TRV: %s, sensor: %s, interval: %ds)",
+            "Setting up room '%s' (TRV: %s, sensor: %s -> %s, interval: %ds)",
             room.name,
             room.trv_entity,
             room.temp_sensor,
+            room.ext_temp_entity,
             room.check_interval,
         )
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
         "rooms": rooms,
-        "cancels": cancels,
+        "unsubs": unsubs,
     }
 
     entry.async_on_unload(
@@ -397,7 +399,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload the config entry."""
     data = hass.data[DOMAIN].pop(entry.entry_id, None)
     if data:
-        for cancel in data.get("cancels", []):
-            cancel()
+        for unsub in data.get("unsubs", []):
+            unsub()
     _LOGGER.info("Simple Heating Manager unloaded")
     return True
