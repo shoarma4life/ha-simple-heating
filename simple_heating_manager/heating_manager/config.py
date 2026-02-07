@@ -47,21 +47,20 @@ def load_config(path: str = OPTIONS_PATH) -> AppConfig:
             continue
 
         window_sensors = room_data.get("window_sensors", [])
-        calibration_mode = room_data.get("calibration_mode", "none")
+        calibration_mode = room_data.get("calibration_mode", "target_temp")
         target_temperature = room_data.get("target_temperature")
 
         if calibration_mode not in ("offset", "target_temp", "none"):
             _log.warning(
-                "Room '%s': invalid calibration_mode '%s', defaulting to 'none'",
+                "Room '%s': invalid calibration_mode '%s', defaulting to 'target_temp'",
                 name,
                 calibration_mode,
             )
-            calibration_mode = "none"
+            calibration_mode = "target_temp"
 
         if calibration_mode == "target_temp" and target_temperature is None:
-            _log.warning(
-                "Room '%s': target_temp calibration requires target_temperature, "
-                "defaulting to 21.0",
+            _log.info(
+                "Room '%s': no target_temperature set, defaulting to 21.0",
                 name,
             )
             target_temperature = 21.0

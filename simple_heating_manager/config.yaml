@@ -1,8 +1,8 @@
 name: "Simple Heating Manager"
 description: "Manages heating per room with TRV calibration and window detection"
-version: "1.0.0"
+version: "1.1.0"
 slug: "simple_heating_manager"
-url: "https://github.com/example/ha-simple-heating"
+url: "https://git.voskuil.cloud/marco/ha-simple-heating"
 arch:
   - amd64
   - aarch64

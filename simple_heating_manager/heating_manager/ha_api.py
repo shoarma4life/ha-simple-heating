@@ -74,6 +74,20 @@ class HomeAssistantAPI:
         _log.info("Sending notification: %s", title)
         self.call_service(domain, service, {"title": title, "message": message})
 
+    def get_all_states(self) -> list[dict]:
+        """Get all entity states from Home Assistant."""
+        url = f"{SUPERVISOR_API}/states"
+        resp = requests.get(url, headers=self._headers, timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+
+    def get_entities_by_domain(self, domain: str) -> list[dict]:
+        """Get all entities for a given domain (e.g., 'climate', 'sensor')."""
+        all_states = self.get_all_states()
+        return [
+            s for s in all_states if s.get("entity_id", "").startswith(f"{domain}.")
+        ]
+
     def validate_entity(self, entity_id: str) -> bool:
         """Check if an entity exists in Home Assistant."""
         try:

@@ -30,6 +30,58 @@ def _setup_logging(level_name: str) -> None:
     )
 
 
+def _log_available_entities(api: HomeAssistantAPI) -> None:
+    """Log available entities to help users find the right entity IDs."""
+    _log.info("=== Available entities for configuration ===")
+
+    try:
+        climate_entities = api.get_entities_by_domain("climate")
+        _log.info("--- Climate entities (TRVs) ---")
+        for e in sorted(climate_entities, key=lambda x: x["entity_id"]):
+            name = e.get("attributes", {}).get("friendly_name", "")
+            _log.info("  %s  (%s)", e["entity_id"], name)
+        if not climate_entities:
+            _log.info("  (none found)")
+    except Exception:
+        _log.exception("Could not retrieve climate entities")
+
+    try:
+        all_sensors = api.get_entities_by_domain("sensor")
+        temp_sensors = [
+            s for s in all_sensors
+            if s.get("attributes", {}).get("device_class") == "temperature"
+            or s.get("attributes", {}).get("unit_of_measurement") in ("°C", "°F")
+        ]
+        _log.info("--- Temperature sensors ---")
+        for e in sorted(temp_sensors, key=lambda x: x["entity_id"]):
+            name = e.get("attributes", {}).get("friendly_name", "")
+            state = e.get("state", "")
+            unit = e.get("attributes", {}).get("unit_of_measurement", "")
+            _log.info("  %s  (%s) = %s%s", e["entity_id"], name, state, unit)
+        if not temp_sensors:
+            _log.info("  (none found)")
+    except Exception:
+        _log.exception("Could not retrieve temperature sensors")
+
+    try:
+        binary_sensors = api.get_entities_by_domain("binary_sensor")
+        window_sensors = [
+            s for s in binary_sensors
+            if s.get("attributes", {}).get("device_class") in ("window", "door", "opening")
+        ]
+        _log.info("--- Window/door sensors ---")
+        for e in sorted(window_sensors, key=lambda x: x["entity_id"]):
+            name = e.get("attributes", {}).get("friendly_name", "")
+            state = e.get("state", "")
+            _log.info("  %s  (%s) = %s", e["entity_id"], name, state)
+        if not window_sensors:
+            _log.info("  (none found)")
+    except Exception:
+        _log.exception("Could not retrieve binary sensors")
+
+    _log.info("=== End of available entities ===")
+
+
 def _validate_entities(api: HomeAssistantAPI, rooms: list[Room]) -> None:
     """Validate that all configured entities exist in Home Assistant."""
     for room in rooms:
@@ -71,6 +123,8 @@ def main() -> None:
     api = HomeAssistantAPI(notification_service=config.notification_service)
 
     rooms = [Room(room_config) for room_config in config.rooms]
+
+    _log_available_entities(api)
 
     _log.info("Validating entities...")
     _validate_entities(api, rooms)
