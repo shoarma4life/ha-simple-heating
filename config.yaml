@@ -1,0 +1,37 @@
+name: "Simple Heating Manager"
+description: "Manages heating per room with TRV calibration and window detection"
+version: "1.0.0"
+slug: "simple_heating_manager"
+url: "https://github.com/example/ha-simple-heating"
+arch:
+  - amd64
+  - aarch64
+  - armv7
+  - armhf
+  - i386
+homeassistant_api: true
+init: false
+options:
+  rooms:
+    - name: "Example Room"
+      trv_entity: "climate.example_trv"
+      temp_sensor: "sensor.example_temperature"
+      window_sensors:
+        - "binary_sensor.example_window"
+      calibration_mode: "target_temp"
+      target_temperature: 21.0
+  check_interval: 30
+  notification_service: "persistent_notification.create"
+  log_level: "info"
+schema:
+  rooms:
+    - name: str
+      trv_entity: str
+      temp_sensor: str
+      window_sensors:
+        - str
+      calibration_mode: list(offset|target_temp|none)
+      target_temperature: "float?"
+  check_interval: int
+  notification_service: str
+  log_level: list(debug|info|warning|error)

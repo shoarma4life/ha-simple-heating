@@ -1,0 +1,37 @@
+configuration:
+  rooms:
+    name: Rooms
+    description: List of rooms to manage
+    items:
+      name:
+        name: Room Name
+        description: A friendly name for the room
+      trv_entity:
+        name: TRV Entity
+        description: The climate entity ID of the TRV (e.g., climate.living_room_trv)
+      temp_sensor:
+        name: Temperature Sensor
+        description: External temperature sensor entity ID (e.g., sensor.living_room_temperature)
+      window_sensors:
+        name: Window Sensors
+        description: List of binary sensor entity IDs for window contacts
+      calibration_mode:
+        name: Calibration Mode
+        description: >-
+          How to calibrate the TRV. "offset" adjusts the TRV's internal calibration
+          offset entity, "target_temp" adjusts the target temperature to compensate,
+          "none" disables calibration.
+      target_temperature:
+        name: Target Temperature
+        description: Desired room temperature (used with target_temp calibration mode)
+  check_interval:
+    name: Check Interval
+    description: How often to check room states (in seconds)
+  notification_service:
+    name: Notification Service
+    description: >-
+      The Home Assistant notification service to use for alerts
+      (e.g., persistent_notification.create or notify.mobile_app_phone)
+  log_level:
+    name: Log Level
+    description: Logging verbosity (debug, info, warning, error)
