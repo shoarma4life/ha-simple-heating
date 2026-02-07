@@ -232,17 +232,17 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                 )
                 return self.async_create_entry(title="", data={})
 
-            # Push sensor mode to external if requested
+            # Push sensor mode to external via MQTT if requested
             if user_input.get("push_sensor_mode"):
                 trv_name = room.get(CONF_TRV_ENTITY, "").split(".", 1)[-1]
-                sensor_mode_entity = f"select.{trv_name}_sensor"
+                mqtt_topic = f"zigbee2mqtt/{trv_name}/set"
                 try:
                     await self.hass.services.async_call(
-                        "select",
-                        "select_option",
+                        "mqtt",
+                        "publish",
                         {
-                            "entity_id": sensor_mode_entity,
-                            "option": "external",
+                            "topic": mqtt_topic,
+                            "payload": '{"sensor": "external"}',
                         },
                     )
                 except Exception:
