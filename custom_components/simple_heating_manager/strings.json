@@ -51,6 +51,7 @@
           "trv_entity": "TRV (climate entity)",
           "temp_sensor": "External temperature sensor",
           "window_sensors": "Window sensors",
+          "sensor_mode_entity": "Sensor mode entity",
           "check_interval": "Check interval (seconds)"
         },
         "data_description": {
@@ -58,6 +59,7 @@
           "trv_entity": "The climate entity of the TRV to control.",
           "temp_sensor": "External temperature sensor to push to the TRV.",
           "window_sensors": "Binary sensors that detect open windows.",
+          "sensor_mode_entity": "Select entity to switch TRV between internal/external sensor.",
           "check_interval": "How often to check windows and update CV switch (in seconds)."
         }
       },
@@ -69,6 +71,7 @@
           "trv_entity": "TRV (climate entity)",
           "temp_sensor": "External temperature sensor",
           "window_sensors": "Window sensors",
+          "sensor_mode_entity": "Sensor mode entity",
           "check_interval": "Check interval (seconds)",
           "push_sensor_mode": "Push sensor mode to external",
           "delete_room": "Delete this room"
@@ -78,6 +81,7 @@
           "trv_entity": "The climate entity of the TRV to control.",
           "temp_sensor": "External temperature sensor to push to the TRV.",
           "window_sensors": "Binary sensors that detect open windows.",
+          "sensor_mode_entity": "Select entity to switch TRV between internal/external sensor.",
           "check_interval": "How often to check windows and update CV switch (in seconds).",
           "push_sensor_mode": "Enable to force the TRV sensor mode to 'external' now.",
           "delete_room": "Enable to permanently remove this room."

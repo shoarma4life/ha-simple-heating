@@ -18,6 +18,7 @@ from .const import (
     CONF_NOTIFICATION_SERVICE,
     CONF_ROOM_NAME,
     CONF_ROOMS,
+    CONF_SENSOR_MODE_ENTITY,
     CONF_TEMP_SENSOR,
     CONF_TRV_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -201,6 +202,9 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                         domain="binary_sensor", multiple=True
                     )
                 ),
+                vol.Optional(CONF_SENSOR_MODE_ENTITY): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="select")
+                ),
                 vol.Optional(
                     CONF_CHECK_INTERVAL, default=DEFAULT_CHECK_INTERVAL
                 ): selector.NumberSelector(
@@ -234,19 +238,22 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
 
             # Push sensor mode to external if requested
             if user_input.get("push_sensor_mode"):
-                trv_name = room.get(CONF_TRV_ENTITY, "").split(".", 1)[-1]
-                sensor_mode_entity = f"select.{trv_name}_sensor"
-                try:
-                    await self.hass.services.async_call(
-                        "select",
-                        "select_option",
-                        {
-                            "entity_id": sensor_mode_entity,
-                            "option": "external",
-                        },
-                    )
-                except Exception:
-                    pass
+                sensor_entity = user_input.get(
+                    CONF_SENSOR_MODE_ENTITY,
+                    room.get(CONF_SENSOR_MODE_ENTITY),
+                )
+                if sensor_entity:
+                    try:
+                        await self.hass.services.async_call(
+                            "select",
+                            "select_option",
+                            {
+                                "entity_id": sensor_entity,
+                                "option": "external",
+                            },
+                        )
+                    except Exception:
+                        pass
 
             room_data = {
                 k: v
@@ -272,8 +279,7 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
         # Read current temperatures for display
         trv_entity = room.get(CONF_TRV_ENTITY, "")
         temp_sensor = room.get(CONF_TEMP_SENSOR, "")
-        trv_name = trv_entity.split(".", 1)[-1] if trv_entity else ""
-        sensor_mode_entity = f"select.{trv_name}_sensor"
+        sensor_mode_entity = room.get(CONF_SENSOR_MODE_ENTITY, "")
 
         trv_state = self.hass.states.get(trv_entity)
         trv_temp = "?"
@@ -325,6 +331,14 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                     selector.EntitySelectorConfig(
                         domain="binary_sensor", multiple=True
                     )
+                ),
+                vol.Optional(
+                    CONF_SENSOR_MODE_ENTITY,
+                    description={
+                        "suggested_value": room.get(CONF_SENSOR_MODE_ENTITY)
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="select")
                 ),
                 vol.Optional(
                     CONF_CHECK_INTERVAL,

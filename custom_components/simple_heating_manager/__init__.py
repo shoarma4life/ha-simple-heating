@@ -28,6 +28,7 @@ from .const import (
     CONF_NOTIFICATION_SERVICE,
     CONF_ROOM_NAME,
     CONF_ROOMS,
+    CONF_SENSOR_MODE_ENTITY,
     CONF_TEMP_SENSOR,
     CONF_TRV_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -56,12 +57,13 @@ class Room:
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
 
-        # Derive entities from TRV name
+        # Derive external temp entity from TRV name
         # e.g. climate.trv_badkamer -> number.trv_badkamer_external_temperature_input
-        #                            -> select.trv_badkamer_sensor
         trv_name = self.trv_entity.split(".", 1)[1]
         self.ext_temp_entity: str = f"number.{trv_name}_external_temperature_input"
-        self.sensor_mode_entity: str = f"select.{trv_name}_sensor"
+
+        # Sensor mode entity: use configured value, or derive from TRV name
+        self.sensor_mode_entity: str = room_cfg.get(CONF_SENSOR_MODE_ENTITY) or f"select.{trv_name}_sensor"
 
         self.sensor_mode_set: bool = False
         self.window_open: bool = False
