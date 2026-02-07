@@ -82,26 +82,40 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Show menu: edit settings or add a room."""
+        """Show menu: edit settings, add a room, or edit existing rooms."""
         if user_input is not None:
             next_step = user_input.get("next_action")
             if next_step == "settings":
                 return await self.async_step_settings()
             if next_step == "add_room":
                 return await self.async_step_add_room()
+            if next_step and next_step.startswith("edit_room_"):
+                self._editing_room_index = int(next_step.replace("edit_room_", ""))
+                return await self.async_step_edit_room()
+
+        rooms = self._config_entry.data.get(CONF_ROOMS, [])
+
+        options = [
+            selector.SelectOptionDict(
+                value="settings", label="Edit settings"
+            ),
+            selector.SelectOptionDict(
+                value="add_room", label="Add a room"
+            ),
+        ]
+        for i, room in enumerate(rooms):
+            options.append(
+                selector.SelectOptionDict(
+                    value=f"edit_room_{i}",
+                    label=f"Edit: {room[CONF_ROOM_NAME]}",
+                )
+            )
 
         schema = vol.Schema(
             {
                 vol.Required("next_action"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[
-                            selector.SelectOptionDict(
-                                value="settings", label="Edit settings"
-                            ),
-                            selector.SelectOptionDict(
-                                value="add_room", label="Add a room"
-                            ),
-                        ],
+                        options=options,
                         mode="list",
                     )
                 ),
@@ -199,4 +213,83 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
 
         return self.async_show_form(
             step_id="add_room", data_schema=schema, errors=errors
+        )
+
+    async def async_step_edit_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Edit an existing room."""
+        errors: dict[str, str] = {}
+        rooms = list(self._config_entry.data.get(CONF_ROOMS, []))
+        room = rooms[self._editing_room_index]
+
+        if user_input is not None:
+            if user_input.get("delete_room"):
+                rooms.pop(self._editing_room_index)
+                new_data = {**self._config_entry.data, CONF_ROOMS: rooms}
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry, data=new_data
+                )
+                return self.async_create_entry(title="", data={})
+
+            room_data = {k: v for k, v in user_input.items() if k != "delete_room"}
+            new_name = room_data[CONF_ROOM_NAME]
+            existing_names = [
+                r[CONF_ROOM_NAME]
+                for i, r in enumerate(rooms)
+                if i != self._editing_room_index
+            ]
+            if new_name in existing_names:
+                errors["base"] = "room_already_exists"
+            else:
+                rooms[self._editing_room_index] = room_data
+                new_data = {**self._config_entry.data, CONF_ROOMS: rooms}
+                self.hass.config_entries.async_update_entry(
+                    self._config_entry, data=new_data
+                )
+                return self.async_create_entry(title="", data={})
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_ROOM_NAME, default=room.get(CONF_ROOM_NAME)
+                ): selector.TextSelector(),
+                vol.Required(
+                    CONF_TRV_ENTITY, default=room.get(CONF_TRV_ENTITY)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="climate")
+                ),
+                vol.Required(
+                    CONF_TEMP_SENSOR, default=room.get(CONF_TEMP_SENSOR)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="sensor", device_class="temperature"
+                    )
+                ),
+                vol.Optional(
+                    CONF_WINDOW_SENSORS,
+                    description={
+                        "suggested_value": room.get(CONF_WINDOW_SENSORS)
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain="binary_sensor", multiple=True
+                    )
+                ),
+                vol.Optional(
+                    CONF_CHECK_INTERVAL,
+                    default=room.get(CONF_CHECK_INTERVAL, DEFAULT_CHECK_INTERVAL),
+                ): selector.NumberSelector(
+                    selector.NumberSelectorConfig(
+                        min=10, max=300, step=5, mode="box"
+                    )
+                ),
+                vol.Optional(
+                    "delete_room", default=False
+                ): selector.BooleanSelector(),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="edit_room", data_schema=schema, errors=errors
         )

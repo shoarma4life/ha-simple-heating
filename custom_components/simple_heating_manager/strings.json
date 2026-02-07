@@ -60,6 +60,26 @@
           "window_sensors": "Binary sensors that detect open windows.",
           "check_interval": "How often to check windows and update CV switch (in seconds)."
         }
+      },
+      "edit_room": {
+        "title": "Edit room",
+        "description": "Edit room settings or delete this room.",
+        "data": {
+          "name": "Room name",
+          "trv_entity": "TRV (climate entity)",
+          "temp_sensor": "External temperature sensor",
+          "window_sensors": "Window sensors",
+          "check_interval": "Check interval (seconds)",
+          "delete_room": "Delete this room"
+        },
+        "data_description": {
+          "name": "A unique name for this room.",
+          "trv_entity": "The climate entity of the TRV to control.",
+          "temp_sensor": "External temperature sensor to push to the TRV.",
+          "window_sensors": "Binary sensors that detect open windows.",
+          "check_interval": "How often to check windows and update CV switch (in seconds).",
+          "delete_room": "Enable to permanently remove this room."
+        }
       }
     },
     "error": {
