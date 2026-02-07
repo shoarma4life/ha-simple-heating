@@ -280,6 +280,7 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
         trv_entity = room.get(CONF_TRV_ENTITY, "")
         temp_sensor = room.get(CONF_TEMP_SENSOR, "")
         sensor_mode_entity = room.get(CONF_SENSOR_MODE_ENTITY, "")
+        trv_name = trv_entity.split(".", 1)[-1] if trv_entity else ""
 
         trv_state = self.hass.states.get(trv_entity)
         trv_temp = "?"
@@ -291,6 +292,16 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                 trv_temp = f"{current}°C"
             if target is not None:
                 trv_target = f"{target}°C"
+
+        # Internal TRV sensor (local_temperature)
+        local_temp_entity = f"sensor.{trv_name}_local_temperature"
+        local_state = self.hass.states.get(local_temp_entity)
+        local_temp = "?"
+        if local_state is not None and local_state.state not in (
+            "unknown",
+            "unavailable",
+        ):
+            local_temp = f"{local_state.state}°C"
 
         sensor_state = self.hass.states.get(temp_sensor)
         sensor_temp = "?"
@@ -364,6 +375,7 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
             description_placeholders={
                 "trv_temp": trv_temp,
                 "trv_target": trv_target,
+                "local_temp": local_temp,
                 "sensor_temp": sensor_temp,
                 "sensor_mode": sensor_mode,
             },

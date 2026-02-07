@@ -95,6 +95,22 @@ class RoomStatusSensor(SensorEntity):
                 "hvac_action", trv_state.state
             )
 
+        # Internal TRV sensor (local_temperature)
+        trv_name = room.trv_entity.split(".", 1)[1]
+        local_state = self.hass.states.get(
+            f"sensor.{trv_name}_local_temperature"
+        )
+        if local_state is not None and local_state.state not in (
+            "unknown",
+            "unavailable",
+        ):
+            try:
+                attrs["local_temperature"] = round(
+                    float(local_state.state), 1
+                )
+            except (ValueError, TypeError):
+                pass
+
         sensor_state = self.hass.states.get(room.temp_sensor)
         if sensor_state is not None and sensor_state.state not in (
             "unknown",

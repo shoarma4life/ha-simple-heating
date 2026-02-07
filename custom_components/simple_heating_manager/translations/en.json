@@ -65,7 +65,7 @@
       },
       "edit_room": {
         "title": "Edit room",
-        "description": "TRV temperature: {trv_temp} (target: {trv_target})\nExternal sensor: {sensor_temp}\nSensor mode: {sensor_mode}",
+        "description": "TRV temperature: {trv_temp} (target: {trv_target})\nTRV internal sensor: {local_temp}\nExternal sensor: {sensor_temp}\nSensor mode: {sensor_mode}",
         "data": {
           "name": "Room name",
           "trv_entity": "TRV (climate entity)",
