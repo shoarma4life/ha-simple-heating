@@ -2,10 +2,11 @@
 
 Manages heating per room:
 - Pushes external temperature sensor reading to TRV (offset calibration)
-- Controls CV boiler switch based on TRV heat demand
+- Controls CV boiler switches based on TRV heat demand
 - Window detection: turns off TRV when window opens, restores when closed
 
-Each config entry represents one room.
+Single config entry with global settings (CV switches, notifications)
+and a list of rooms.
 """
 
 from __future__ import annotations
@@ -19,9 +20,11 @@ from homeassistant.helpers.event import async_track_time_interval
 
 from .const import (
     CONF_CHECK_INTERVAL,
-    CONF_CV_SWITCH,
-    CONF_NAME,
+    CONF_CV_SWITCH_1,
+    CONF_CV_SWITCH_2,
     CONF_NOTIFICATION_SERVICE,
+    CONF_ROOM_NAME,
+    CONF_ROOMS,
     CONF_TEMP_SENSOR,
     CONF_TRV_ENTITY,
     CONF_WINDOW_SENSORS,
@@ -36,17 +39,17 @@ _LOGGER = logging.getLogger(__name__)
 class Room:
     """Manages heating logic for a single room."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
-        """Initialize room from config entry."""
+    def __init__(self, hass: HomeAssistant, room_cfg: dict, global_cfg: dict) -> None:
+        """Initialize room."""
         self.hass = hass
-        self.entry = entry
 
-        self.name: str = entry.data[CONF_NAME]
-        self.trv_entity: str = entry.data[CONF_TRV_ENTITY]
-        self.temp_sensor: str = entry.data[CONF_TEMP_SENSOR]
-        self.window_sensors: list[str] = entry.data.get(CONF_WINDOW_SENSORS, []) or []
-        self.cv_switch: str | None = entry.data.get(CONF_CV_SWITCH)
-        self.notification_service: str = entry.data.get(
+        self.name: str = room_cfg[CONF_ROOM_NAME]
+        self.trv_entity: str = room_cfg[CONF_TRV_ENTITY]
+        self.temp_sensor: str = room_cfg[CONF_TEMP_SENSOR]
+        self.window_sensors: list[str] = room_cfg.get(CONF_WINDOW_SENSORS, []) or []
+        self.check_interval: int = room_cfg.get(CONF_CHECK_INTERVAL, DEFAULT_CHECK_INTERVAL)
+
+        self.notification_service: str = global_cfg.get(
             CONF_NOTIFICATION_SERVICE, DEFAULT_NOTIFICATION_SERVICE
         )
 
@@ -169,13 +172,7 @@ class Room:
         )
 
     def _push_external_temp(self) -> None:
-        """Push external sensor temperature to TRV as calibration offset.
-
-        Calculates offset = external_temp - trv_internal_temp and writes it
-        to the TRV's local_temperature_calibration entity so the TRV knows
-        the real room temperature and can decide itself when to heat.
-        """
-        # Read external temperature
+        """Push external sensor temperature to TRV as calibration offset."""
         try:
             ext_state = self.hass.states.get(self.temp_sensor)
             if ext_state is None or ext_state.state in ("unknown", "unavailable"):
@@ -194,7 +191,6 @@ class Room:
             )
             return
 
-        # Read TRV internal temperature
         try:
             trv_state = self.hass.states.get(self.trv_entity)
             if trv_state is None:
@@ -228,8 +224,6 @@ class Room:
             )
             return
 
-        # Derive the offset entity from the TRV entity name
-        # e.g., climate.living_room_trv -> number.living_room_trv_local_temperature_calibration
         trv_name = self.trv_entity.split(".", 1)[1]
         offset_entity = f"number.{trv_name}_local_temperature_calibration"
 
@@ -289,13 +283,11 @@ class Room:
                 self.needs_heat = False
                 return
 
-            # Primary: use hvac_action attribute (most reliable)
             hvac_action = trv_state.attributes.get("hvac_action")
             if hvac_action is not None:
                 self.needs_heat = hvac_action == "heating"
                 return
 
-            # Fallback: compare current_temperature to target
             if trv_state.state == "off":
                 self.needs_heat = False
                 return
@@ -312,26 +304,15 @@ class Room:
             self.needs_heat = False
 
 
-def _update_cv_switches(hass: HomeAssistant) -> None:
-    """Update all CV boiler switches across rooms.
+def _update_cv_switches(hass: HomeAssistant, entry: ConfigEntry, rooms: list[Room]) -> None:
+    """Update CV boiler switches based on heat demand across all rooms."""
+    any_needs_heat = any(r.needs_heat for r in rooms)
 
-    A switch is turned ON if any room using it needs heat.
-    A switch is turned OFF only when no room using it needs heat.
-    """
-    rooms_data = hass.data.get(DOMAIN, {})
-
-    # Group rooms by their cv_switch entity
-    switch_demand: dict[str, bool] = {}
-    for entry_data in rooms_data.values():
-        room: Room = entry_data["room"]
-        if not room.cv_switch:
+    for key in (CONF_CV_SWITCH_1, CONF_CV_SWITCH_2):
+        switch_entity = entry.data.get(key)
+        if not switch_entity:
             continue
-        if room.cv_switch not in switch_demand:
-            switch_demand[room.cv_switch] = False
-        if room.needs_heat:
-            switch_demand[room.cv_switch] = True
 
-    for switch_entity, any_needs_heat in switch_demand.items():
         try:
             current_state = hass.states.get(switch_entity)
             if current_state is None:
@@ -358,38 +339,50 @@ def _update_cv_switches(hass: HomeAssistant) -> None:
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Set up Simple Heating Manager from a config entry (one room)."""
-    room = Room(hass, entry)
-    interval = entry.data.get(CONF_CHECK_INTERVAL, DEFAULT_CHECK_INTERVAL)
+    """Set up Simple Heating Manager from a config entry."""
+    rooms_cfg = entry.data.get(CONF_ROOMS, [])
+    global_cfg = dict(entry.data)
 
-    _LOGGER.info(
-        "Setting up room '%s' (TRV: %s, sensor: %s, interval: %ds)",
-        room.name,
-        room.trv_entity,
-        room.temp_sensor,
-        interval,
-    )
+    rooms: list[Room] = []
+    cancels: list = []
 
-    def _update(_now=None) -> None:
-        """Periodic update callback."""
-        room.update()
-        room.check_heat_demand()
-        _update_cv_switches(hass)
+    for room_cfg in rooms_cfg:
+        room = Room(hass, room_cfg, global_cfg)
+        rooms.append(room)
 
-    cancel = async_track_time_interval(
-        hass, _update, timedelta(seconds=interval)
-    )
+        def make_update(r: Room):
+            def _update(_now=None):
+                r.update()
+                r.check_heat_demand()
+                _update_cv_switches(hass, entry, rooms)
+            return _update
+
+        cancel = async_track_time_interval(
+            hass, make_update(room), timedelta(seconds=room.check_interval)
+        )
+        cancels.append(cancel)
+
+        _LOGGER.info(
+            "Setting up room '%s' (TRV: %s, sensor: %s, interval: %ds)",
+            room.name,
+            room.trv_entity,
+            room.temp_sensor,
+            room.check_interval,
+        )
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = {
-        "room": room,
-        "cancel": cancel,
+        "rooms": rooms,
+        "cancels": cancels,
     }
 
     entry.async_on_unload(
         entry.add_update_listener(_async_update_listener)
     )
 
+    _LOGGER.info(
+        "Simple Heating Manager started with %d room(s)", len(rooms)
+    )
     return True
 
 
@@ -401,9 +394,10 @@ async def _async_update_listener(
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
-    """Unload a config entry."""
+    """Unload the config entry."""
     data = hass.data[DOMAIN].pop(entry.entry_id, None)
-    if data and data.get("cancel"):
-        data["cancel"]()
-    _LOGGER.info("Unloaded room '%s'", entry.data.get(CONF_NAME, "unknown"))
+    if data:
+        for cancel in data.get("cancels", []):
+            cancel()
+    _LOGGER.info("Simple Heating Manager unloaded")
     return True
