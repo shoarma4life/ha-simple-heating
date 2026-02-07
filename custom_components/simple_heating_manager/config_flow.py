@@ -17,6 +17,7 @@ from .const import (
     CONF_CV_SWITCH_2,
     CONF_NOTIFICATION_SERVICE,
     CONF_ROOM_NAME,
+    CONF_ROOM_SWITCH,
     CONF_ROOMS,
     CONF_SENSOR_MODE_ENTITY,
     CONF_TEMP_SENSOR,
@@ -205,6 +206,11 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                 vol.Optional(CONF_SENSOR_MODE_ENTITY): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="select")
                 ),
+                vol.Optional(CONF_ROOM_SWITCH): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "input_boolean"]
+                    )
+                ),
                 vol.Optional(
                     CONF_CHECK_INTERVAL, default=DEFAULT_CHECK_INTERVAL
                 ): selector.NumberSelector(
@@ -350,6 +356,16 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
                     },
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="select")
+                ),
+                vol.Optional(
+                    CONF_ROOM_SWITCH,
+                    description={
+                        "suggested_value": room.get(CONF_ROOM_SWITCH)
+                    },
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        domain=["switch", "input_boolean"]
+                    )
                 ),
                 vol.Optional(
                     CONF_CHECK_INTERVAL,

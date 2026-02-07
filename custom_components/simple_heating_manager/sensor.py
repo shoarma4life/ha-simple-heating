@@ -132,6 +132,8 @@ class RoomStatusSensor(SensorEntity):
 
         attrs["trv_entity"] = room.trv_entity
         attrs["temp_sensor"] = room.temp_sensor
+        if room.room_switch:
+            attrs["room_switch"] = room.room_switch
 
         self._attr_extra_state_attributes = attrs
         self.async_write_ha_state()

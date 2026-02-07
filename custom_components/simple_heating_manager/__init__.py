@@ -28,6 +28,7 @@ from .const import (
     CONF_NOTIFICATION_SERVICE,
     CONF_ROOM_NAME,
     CONF_ROOMS,
+    CONF_ROOM_SWITCH,
     CONF_SENSOR_MODE_ENTITY,
     CONF_TEMP_SENSOR,
     CONF_TRV_ENTITY,
@@ -51,6 +52,7 @@ class Room:
         self.trv_entity: str = room_cfg[CONF_TRV_ENTITY]
         self.temp_sensor: str = room_cfg[CONF_TEMP_SENSOR]
         self.window_sensors: list[str] = room_cfg.get(CONF_WINDOW_SENSORS, []) or []
+        self.room_switch: str | None = room_cfg.get(CONF_ROOM_SWITCH) or None
         self.check_interval: int = room_cfg.get(CONF_CHECK_INTERVAL, DEFAULT_CHECK_INTERVAL)
 
         self.notification_service: str = global_cfg.get(
@@ -339,6 +341,47 @@ class Room:
             )
             self.needs_heat = False
 
+    async def async_update_room_switch(self) -> None:
+        """Turn room switch on/off based on heat demand."""
+        if not self.room_switch:
+            return
+
+        try:
+            current_state = self.hass.states.get(self.room_switch)
+            if current_state is None:
+                _LOGGER.warning(
+                    "Room '%s': switch %s not found", self.name, self.room_switch
+                )
+                return
+
+            is_on = current_state.state == "on"
+            domain = self.room_switch.split(".", 1)[0]
+
+            if self.needs_heat and not is_on:
+                _LOGGER.info(
+                    "Room '%s': turning ON %s (heat demanded)",
+                    self.name,
+                    self.room_switch,
+                )
+                await self.hass.services.async_call(
+                    domain, "turn_on", {"entity_id": self.room_switch}
+                )
+            elif not self.needs_heat and is_on:
+                _LOGGER.info(
+                    "Room '%s': turning OFF %s (no heat needed)",
+                    self.name,
+                    self.room_switch,
+                )
+                await self.hass.services.async_call(
+                    domain, "turn_off", {"entity_id": self.room_switch}
+                )
+        except Exception:
+            _LOGGER.exception(
+                "Room '%s': error updating room switch %s",
+                self.name,
+                self.room_switch,
+            )
+
 
 async def _async_update_cv_switches(
     hass: HomeAssistant, entry: ConfigEntry, rooms: list[Room]
@@ -396,6 +439,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                     return
                 await r.async_push_external_temp()
                 r.check_heat_demand()
+                await r.async_update_room_switch()
                 await _async_update_cv_switches(hass, entry, rooms)
             return _handle_sensor_change
 
@@ -413,6 +457,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                         return
                     await r.async_update()
                     r.check_heat_demand()
+                    await r.async_update_room_switch()
                     await _async_update_cv_switches(hass, entry, rooms)
                 return _handle_window_change
 
@@ -426,6 +471,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             async def _update(_now=None):
                 await r.async_update()
                 r.check_heat_demand()
+                await r.async_update_room_switch()
                 await _async_update_cv_switches(hass, entry, rooms)
             return _update
 
