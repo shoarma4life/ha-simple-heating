@@ -38,19 +38,21 @@ class RoomStatusSensor(SensorEntity):
     """Sensor showing room heating status."""
 
     _attr_has_entity_name = True
+    _attr_should_poll = False
     _attr_icon = "mdi:thermostat"
 
     def __init__(self, entry: ConfigEntry, room) -> None:
         """Initialize the sensor."""
         self._room = room
+        self._entry = entry
         self._attr_unique_id = f"{entry.entry_id}_{room.name}_status"
         self._attr_name = "Status"
+        self._attr_native_value = "Idle"
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, f"{entry.entry_id}_{room.name}")},
             name=room.name,
             manufacturer="Simple Heating Manager",
             model="Room",
-            entry_type=None,
         )
         self._unsub = None
 
