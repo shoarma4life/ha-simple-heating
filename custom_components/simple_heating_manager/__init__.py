@@ -463,6 +463,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         "unsubs": unsubs,
     }
 
+    await hass.config_entries.async_forward_entry_setups(entry, ["sensor"])
+
     entry.async_on_unload(
         entry.add_update_listener(_async_update_listener)
     )
@@ -482,6 +484,7 @@ async def _async_update_listener(
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload the config entry."""
+    await hass.config_entries.async_unload_platforms(entry, ["sensor"])
     data = hass.data[DOMAIN].pop(entry.entry_id, None)
     if data:
         for unsub in data.get("unsubs", []):
