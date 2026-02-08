@@ -2,7 +2,7 @@
 
 Each room entry creates sensors grouped by entity_category:
 - Controls: Window, Room switch
-- Diagnostic: TRV temperature, Target, External, Sensor mode, Battery
+- Diagnostic: TRV temperature, Target, External, Sensor mode, Batteries
 """
 
 from __future__ import annotations
@@ -37,24 +37,56 @@ def _device_info(entry: ConfigEntry, room) -> DeviceInfo:
     )
 
 
-def _find_battery_entity(hass: HomeAssistant, trv_entity_id: str) -> str | None:
+def _find_battery_entity(hass: HomeAssistant, entity_id: str) -> str | None:
+    """Find battery entity on the same device as the given entity."""
     ent_reg = er.async_get(hass)
-    trv_entry = ent_reg.async_get(trv_entity_id)
-    if trv_entry is None or trv_entry.device_id is None:
+    ent_entry = ent_reg.async_get(entity_id)
+    if ent_entry is None:
+        _LOGGER.debug("Battery lookup: %s not in entity registry", entity_id)
+        return None
+    if ent_entry.device_id is None:
+        _LOGGER.debug("Battery lookup: %s has no device_id", entity_id)
         return None
 
-    device_entities = er.async_entries_for_device(ent_reg, trv_entry.device_id)
+    device_entities = er.async_entries_for_device(ent_reg, ent_entry.device_id)
+    _LOGGER.debug(
+        "Battery lookup: %s device %s has %d entities",
+        entity_id, ent_entry.device_id, len(device_entities),
+    )
 
     for entity in device_entities:
         dc = entity.original_device_class or entity.device_class
         if dc is not None and str(dc) == "battery":
+            _LOGGER.debug(
+                "Battery lookup: found %s (device_class=battery) for %s",
+                entity.entity_id, entity_id,
+            )
             return entity.entity_id
 
     for entity in device_entities:
         if "battery" in entity.entity_id:
+            _LOGGER.debug(
+                "Battery lookup: found %s (name match) for %s",
+                entity.entity_id, entity_id,
+            )
             return entity.entity_id
 
+    _LOGGER.debug("Battery lookup: no battery entity found for %s", entity_id)
     return None
+
+
+def _find_battery_entities(
+    hass: HomeAssistant, entity_ids: list[str]
+) -> list[str]:
+    """Find battery entities for a list of entities (deduplicated)."""
+    seen: set[str] = set()
+    result: list[str] = []
+    for eid in entity_ids:
+        bat = _find_battery_entity(hass, eid)
+        if bat and bat not in seen:
+            seen.add(bat)
+            result.append(bat)
+    return result
 
 
 async def async_setup_entry(
@@ -85,9 +117,25 @@ async def async_setup_entry(
     if room.sensor_mode_entity:
         entities.append(RoomSensorModeSensor(entry, room))
 
-    battery_entity = _find_battery_entity(hass, room.trv_entity)
-    if battery_entity:
-        entities.append(RoomBatterySensor(entry, room, battery_entity))
+    # Batteries
+    trv_battery = _find_battery_entity(hass, room.trv_entity)
+    if trv_battery:
+        entities.append(RoomBatterySensor(
+            entry, room, trv_battery, "TRV battery", "trv_battery",
+        ))
+
+    sensor_battery = _find_battery_entity(hass, room.temp_sensor)
+    if sensor_battery:
+        entities.append(RoomBatterySensor(
+            entry, room, sensor_battery, "Sensor battery", "sensor_battery",
+        ))
+
+    if room.window_sensors:
+        window_batteries = _find_battery_entities(hass, room.window_sensors)
+        if window_batteries:
+            entities.append(RoomMultiBatterySensor(
+                entry, room, window_batteries, "Window battery", "window_battery",
+            ))
 
     async_add_entities(entities)
 
@@ -325,7 +373,12 @@ class RoomSensorModeSensor(SensorEntity):
         self.async_write_ha_state()
 
 
+# ── Battery sensors ────────────────────────────────────────────
+
+
 class RoomBatterySensor(SensorEntity):
+    """Battery sensor tracking a single source entity."""
+
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -333,11 +386,13 @@ class RoomBatterySensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "%"
 
-    def __init__(self, entry, room, battery_entity_id: str):
+    def __init__(
+        self, entry, room, battery_entity_id: str, name: str, uid_suffix: str
+    ):
         self._room = room
         self._battery_entity = battery_entity_id
-        self._attr_unique_id = f"{entry.entry_id}_battery"
-        self._attr_name = "TRV battery"
+        self._attr_unique_id = f"{entry.entry_id}_{uid_suffix}"
+        self._attr_name = name
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
@@ -361,4 +416,49 @@ class RoomBatterySensor(SensorEntity):
             except (ValueError, TypeError):
                 pass
         self._attr_native_value = val
+        self.async_write_ha_state()
+
+
+class RoomMultiBatterySensor(SensorEntity):
+    """Battery sensor tracking multiple sources, reports the lowest value."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_entity_category = EntityCategory.DIAGNOSTIC
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(
+        self, entry, room, battery_entity_ids: list[str],
+        name: str, uid_suffix: str,
+    ):
+        self._room = room
+        self._battery_entities = battery_entity_ids
+        self._attr_unique_id = f"{entry.entry_id}_{uid_suffix}"
+        self._attr_name = name
+        self._attr_device_info = _device_info(entry, room)
+        self._unsub = None
+
+    async def async_added_to_hass(self):
+        self._unsub = async_track_time_interval(
+            self.hass, self._update_state, timedelta(seconds=300)
+        )
+        self._update_state()
+
+    async def async_will_remove_from_hass(self):
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _update_state(self, _now=None):
+        values = []
+        for eid in self._battery_entities:
+            s = self.hass.states.get(eid)
+            if s is not None and s.state not in ("unknown", "unavailable"):
+                try:
+                    values.append(round(float(s.state)))
+                except (ValueError, TypeError):
+                    pass
+        self._attr_native_value = min(values) if values else None
         self.async_write_ha_state()
