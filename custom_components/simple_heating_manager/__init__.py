@@ -305,6 +305,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # ── Global entry ──
     if entry_type == ENTRY_TYPE_GLOBAL:
+        if entry.title != "- Settings":
+            hass.config_entries.async_update_entry(entry, title="- Settings")
         hass.data[DOMAIN]["global"] = dict(entry.data)
         entry.async_on_unload(
             entry.add_update_listener(_async_update_listener)
