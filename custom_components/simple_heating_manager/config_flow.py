@@ -109,11 +109,9 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     @staticmethod
     @callback
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
-        """Get the options flow handler."""
         return SimpleHeatingManagerOptionsFlow(config_entry)
 
     def _has_global_entry(self) -> bool:
-        """Check if a global settings entry already exists."""
         for entry in self._async_current_entries():
             if entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
                 return True
@@ -122,7 +120,6 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Route: global settings first time, add room afterwards."""
         if self._has_global_entry():
             return await self.async_step_add_room(user_input)
         return await self.async_step_global(user_input)
@@ -130,7 +127,6 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_global(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Configure global settings (CV switches, notifications)."""
         if user_input is not None:
             return self.async_create_entry(
                 title="Simple Heating Manager",
@@ -161,11 +157,9 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_add_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Add a new room."""
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            # Check for duplicate room names
             for entry in self._async_current_entries():
                 if entry.data.get(CONF_ROOM_NAME) == user_input[CONF_ROOM_NAME]:
                     errors["base"] = "room_already_exists"
@@ -183,26 +177,37 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_add_room_internal(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Create a room entry (called from options flow)."""
+        if user_input is not None:
+            return self.async_create_entry(
+                title=user_input[CONF_ROOM_NAME],
+                data=user_input,
+            )
+        return self.async_abort(reason="unknown")
+
 
 class SimpleHeatingManagerOptionsFlow(OptionsFlow):
     """Handle options flow — settings for global or room entries."""
 
     def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
         self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Route to settings or room edit based on entry type."""
         if self._config_entry.data.get(CONF_ENTRY_TYPE) == ENTRY_TYPE_GLOBAL:
-            return await self.async_step_settings(user_input)
+            return self.async_show_menu(
+                step_id="init",
+                menu_options=["settings", "add_room"],
+            )
         return await self.async_step_edit_room(user_input)
 
     async def async_step_settings(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit global settings."""
         if user_input is not None:
             new_data = {
                 **user_input,
@@ -247,15 +252,38 @@ class SimpleHeatingManagerOptionsFlow(OptionsFlow):
 
         return self.async_show_form(step_id="settings", data_schema=schema)
 
+    async def async_step_add_room(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            for entry in self.hass.config_entries.async_entries(DOMAIN):
+                if entry.data.get(CONF_ROOM_NAME) == user_input[CONF_ROOM_NAME]:
+                    errors["base"] = "room_already_exists"
+                    break
+
+            if not errors:
+                await self.hass.config_entries.flow.async_init(
+                    DOMAIN,
+                    context={"source": "add_room_internal"},
+                    data={**user_input, CONF_ENTRY_TYPE: ENTRY_TYPE_ROOM},
+                )
+                return self.async_create_entry(title="", data={})
+
+        return self.async_show_form(
+            step_id="add_room",
+            data_schema=_room_schema(),
+            errors=errors,
+        )
+
     async def async_step_edit_room(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Edit a room entry."""
         errors: dict[str, str] = {}
         current = self._config_entry.data
 
         if user_input is not None:
-            # Check duplicate names (exclude self)
             new_name = user_input[CONF_ROOM_NAME]
             for entry in self.hass.config_entries.async_entries(DOMAIN):
                 if (

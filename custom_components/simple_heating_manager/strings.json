@@ -44,6 +44,13 @@
   },
   "options": {
     "step": {
+      "init": {
+        "title": "Simple Heating Manager",
+        "menu_options": {
+          "settings": "Edit global settings",
+          "add_room": "Add a room"
+        }
+      },
       "settings": {
         "title": "Settings",
         "description": "Edit global settings.",
@@ -56,6 +63,28 @@
           "cv_switch_1": "Primary switch that controls the boiler.",
           "cv_switch_2": "Optional secondary boiler switch.",
           "notification_service": "Service for notifications."
+        }
+      },
+      "add_room": {
+        "title": "Add room",
+        "description": "Configure a new room.",
+        "data": {
+          "name": "Room name",
+          "trv_entity": "TRV (climate entity)",
+          "temp_sensor": "External temperature sensor",
+          "window_sensors": "Window sensors",
+          "sensor_mode_entity": "Sensor mode entity",
+          "room_switch": "Room switch",
+          "check_interval": "Check interval (seconds)"
+        },
+        "data_description": {
+          "name": "A unique name for this room.",
+          "trv_entity": "The climate entity of the TRV to control.",
+          "temp_sensor": "External temperature sensor to push to the TRV.",
+          "window_sensors": "Binary sensors that detect open windows.",
+          "sensor_mode_entity": "Select entity to switch TRV between internal/external sensor.",
+          "room_switch": "Optional switch to turn on when room needs heat (e.g. floor heating pump).",
+          "check_interval": "How often to check and update (in seconds)."
         }
       },
       "edit_room": {
