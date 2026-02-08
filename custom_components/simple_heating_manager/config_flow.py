@@ -129,7 +129,7 @@ class SimpleHeatingManagerConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> FlowResult:
         if user_input is not None:
             return self.async_create_entry(
-                title="Simple Heating Manager",
+                title="- Settings",
                 data={**user_input, CONF_ENTRY_TYPE: ENTRY_TYPE_GLOBAL},
             )
 
