@@ -44,17 +44,31 @@ def _find_battery_entity(hass: HomeAssistant, trv_entity_id: str) -> str | None:
     """Find the battery sensor for the same device as the TRV."""
     ent_reg = er.async_get(hass)
 
-    # Look up the TRV in the entity registry
     trv_entry = ent_reg.async_get(trv_entity_id)
     if trv_entry is None or trv_entry.device_id is None:
+        _LOGGER.debug("Battery search: TRV %s not in entity registry", trv_entity_id)
         return None
 
-    # Find all entities on the same device
-    for entity in er.async_entries_for_device(ent_reg, trv_entry.device_id):
-        device_class = entity.original_device_class or entity.device_class
-        if device_class == SensorDeviceClass.BATTERY:
+    device_entities = er.async_entries_for_device(ent_reg, trv_entry.device_id)
+
+    # Method 1: search by device_class
+    for entity in device_entities:
+        dc = entity.original_device_class or entity.device_class
+        if dc is not None and str(dc) == "battery":
+            _LOGGER.debug("Battery found via device_class: %s", entity.entity_id)
             return entity.entity_id
 
+    # Method 2: fallback - search by entity_id containing "battery"
+    for entity in device_entities:
+        if "battery" in entity.entity_id:
+            _LOGGER.debug("Battery found via entity_id pattern: %s", entity.entity_id)
+            return entity.entity_id
+
+    _LOGGER.debug(
+        "Battery search: no battery entity on device %s (checked %d entities)",
+        trv_entry.device_id,
+        len(device_entities),
+    )
     return None
 
 
@@ -70,7 +84,6 @@ async def async_setup_entry(
     entities = []
     for room in rooms:
         # Controls section
-        entities.append(RoomStatusSensor(entry, room))
         if room.window_sensors:
             entities.append(RoomWindowSensor(entry, room))
         if room.room_switch:
@@ -98,56 +111,6 @@ async def async_setup_entry(
 
 
 # ── Controls (no entity_category) ─────────────────────────────
-
-
-class RoomStatusSensor(SensorEntity):
-    """Sensor showing room heating status."""
-
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_icon = "mdi:thermostat"
-
-    def __init__(self, entry: ConfigEntry, room) -> None:
-        self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_status"
-        self._attr_name = "Status"
-        self._attr_native_value = "Idle"
-        self._attr_device_info = _device_info(entry, room)
-        self._unsub = None
-
-    async def async_added_to_hass(self) -> None:
-        self._unsub = async_track_time_interval(
-            self.hass, self._update_state, timedelta(seconds=30)
-        )
-        self._update_state()
-
-    async def async_will_remove_from_hass(self) -> None:
-        if self._unsub:
-            self._unsub()
-
-    @callback
-    def _update_state(self, _now=None) -> None:
-        room = self._room
-        if room.window_open:
-            status = "Window open"
-        elif room.needs_heat:
-            status = "Heating"
-        else:
-            status = "Idle"
-
-        self._attr_native_value = status
-        attrs = {"trv_entity": room.trv_entity, "temp_sensor": room.temp_sensor}
-        if room.room_switch:
-            attrs["room_switch"] = room.room_switch
-        if room.last_pushed_temp is not None:
-            attrs["last_pushed_temp"] = room.last_pushed_temp
-        trv_state = self.hass.states.get(room.trv_entity)
-        if trv_state is not None:
-            attrs["hvac_action"] = trv_state.attributes.get(
-                "hvac_action", trv_state.state
-            )
-        self._attr_extra_state_attributes = attrs
-        self.async_write_ha_state()
 
 
 class RoomWindowSensor(SensorEntity):
