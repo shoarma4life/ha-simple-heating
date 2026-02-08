@@ -116,17 +116,6 @@ async def async_setup_entry(
     entities.append(RoomExternalTemperatureSensor(entry, room))
     if room.sensor_mode_entity:
         entities.append(RoomSensorModeSensor(entry, room))
-    entities.append(RoomSourceEntitySensor(
-        entry, room, room.temp_sensor, "Temperature sensor", "src_temp",
-        "mdi:thermometer-probe",
-    ))
-    if room.window_sensors:
-        entities.append(RoomSourceEntitySensor(
-            entry, room,
-            ", ".join(room.window_sensors),
-            "Window sensors", "src_window",
-            "mdi:window-closed-variant",
-        ))
 
     # Batteries
     trv_battery = _find_battery_entity(hass, room.trv_entity)
@@ -382,26 +371,6 @@ class RoomSensorModeSensor(SensorEntity):
             val = s.state
         self._attr_native_value = val
         self.async_write_ha_state()
-
-
-# ── Source entity references ───────────────────────────────────
-
-
-class RoomSourceEntitySensor(SensorEntity):
-    """Static sensor showing a configured source entity ID."""
-
-    _attr_has_entity_name = True
-    _attr_should_poll = False
-    _attr_entity_category = EntityCategory.DIAGNOSTIC
-
-    def __init__(
-        self, entry, room, value: str, name: str, uid_suffix: str, icon: str,
-    ):
-        self._attr_unique_id = f"{entry.entry_id}_{uid_suffix}"
-        self._attr_name = name
-        self._attr_native_value = value
-        self._attr_icon = icon
-        self._attr_device_info = _device_info(entry, room)
 
 
 # ── Battery sensors ────────────────────────────────────────────
