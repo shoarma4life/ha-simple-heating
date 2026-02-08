@@ -39,7 +39,8 @@ async def async_setup_entry(
 
     entities = []
     for room in rooms:
-        entities.append(PushExternalSensorButton(entry, room))
+        if room.sensor_mode_entity:
+            entities.append(PushExternalSensorButton(entry, room))
 
     async_add_entities(entities)
 

@@ -64,8 +64,8 @@ class Room:
         trv_name = self.trv_entity.split(".", 1)[1]
         self.ext_temp_entity: str = f"number.{trv_name}_external_temperature_input"
 
-        # Sensor mode entity: use configured value, or derive from TRV name
-        self.sensor_mode_entity: str = room_cfg.get(CONF_SENSOR_MODE_ENTITY) or f"select.{trv_name}_sensor"
+        # Sensor mode entity: only if explicitly configured
+        self.sensor_mode_entity: str | None = room_cfg.get(CONF_SENSOR_MODE_ENTITY) or None
 
         self.sensor_mode_set: bool = False
         self.window_open: bool = False
@@ -188,7 +188,7 @@ class Room:
 
     async def _async_ensure_external_sensor_mode(self) -> None:
         """Ensure the TRV sensor mode is set to 'external'."""
-        if self.sensor_mode_set:
+        if self.sensor_mode_set or not self.sensor_mode_entity:
             return
 
         try:

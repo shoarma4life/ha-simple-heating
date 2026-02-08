@@ -48,11 +48,13 @@ async def async_setup_entry(
         entities.append(RoomTrvTemperatureSensor(entry, room))
         entities.append(RoomTargetTemperatureSensor(entry, room))
         entities.append(RoomExternalTemperatureSensor(entry, room))
-        entities.append(RoomSensorModeSensor(entry, room))
+        if room.sensor_mode_entity:
+            entities.append(RoomSensorModeSensor(entry, room))
         if room.window_sensors:
             entities.append(RoomWindowSensor(entry, room))
         if room.room_switch:
             entities.append(RoomSwitchStateSensor(entry, room))
+        entities.append(RoomBatterySensor(entry, room))
 
     async_add_entities(entities)
 
@@ -386,6 +388,53 @@ class RoomSwitchStateSensor(SensorEntity):
                 "mdi:power-plug" if state.state == "on"
                 else "mdi:power-plug-off"
             )
+        else:
+            self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class RoomBatterySensor(SensorEntity):
+    """Sensor showing TRV battery percentage."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "%"
+
+    def __init__(self, entry: ConfigEntry, room) -> None:
+        """Initialize the sensor."""
+        self._room = room
+        trv_name = room.trv_entity.split(".", 1)[1]
+        self._battery_entity = f"sensor.{trv_name}_battery"
+        self._attr_unique_id = f"{entry.entry_id}_{room.name}_battery"
+        self._attr_name = "Battery"
+        self._attr_device_info = _device_info(entry, room)
+        self._unsub = None
+
+    async def async_added_to_hass(self) -> None:
+        """Start periodic updates when added."""
+        self._unsub = async_track_time_interval(
+            self.hass, self._update_state, timedelta(seconds=300)
+        )
+        self._update_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up on removal."""
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _update_state(self, _now=None) -> None:
+        """Update from battery sensor entity."""
+        state = self.hass.states.get(self._battery_entity)
+        if state is not None and state.state not in (
+            "unknown", "unavailable",
+        ):
+            try:
+                self._attr_native_value = round(float(state.state))
+            except (ValueError, TypeError):
+                self._attr_native_value = None
         else:
             self._attr_native_value = None
         self.async_write_ha_state()
