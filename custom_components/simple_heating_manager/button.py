@@ -13,15 +13,14 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_ROOM
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _device_info(entry: ConfigEntry, room) -> DeviceInfo:
-    """Return shared DeviceInfo for a room."""
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{entry.entry_id}_{room.name}")},
+        identifiers={(DOMAIN, entry.entry_id)},
         name=room.name,
         manufacturer="Simple Heating Manager",
         model="Room",
@@ -33,14 +32,17 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up room buttons."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    rooms = data["rooms"]
+    if entry.data.get(CONF_ENTRY_TYPE) != ENTRY_TYPE_ROOM:
+        return
+
+    room_data = hass.data[DOMAIN]["rooms"].get(entry.entry_id)
+    if not room_data:
+        return
+    room = room_data["room"]
 
     entities = []
-    for room in rooms:
-        if room.sensor_mode_entity:
-            entities.append(PushExternalSensorButton(entry, room))
+    if room.sensor_mode_entity:
+        entities.append(PushExternalSensorButton(entry, room))
 
     async_add_entities(entities)
 
@@ -53,14 +55,12 @@ class PushExternalSensorButton(ButtonEntity):
     _attr_icon = "mdi:upload"
 
     def __init__(self, entry: ConfigEntry, room) -> None:
-        """Initialize the button."""
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_push_external"
+        self._attr_unique_id = f"{entry.entry_id}_push_external"
         self._attr_name = "Push external sensor"
         self._attr_device_info = _device_info(entry, room)
 
     async def async_press(self) -> None:
-        """Handle button press: set sensor mode to external."""
         room = self._room
         entity_id = room.sensor_mode_entity
 

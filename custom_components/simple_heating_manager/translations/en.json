@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Simple Heating Manager",
-        "description": "Configure your boiler switches and notification service. Rooms can be added after setup via Configure.",
+        "description": "Configure your boiler switches and notification service.",
         "data": {
           "cv_switch_1": "Boiler switch 1",
           "cv_switch_2": "Boiler switch 2",
@@ -13,34 +13,6 @@
           "cv_switch_1": "Primary switch that controls the boiler.",
           "cv_switch_2": "Optional secondary boiler switch.",
           "notification_service": "Service for notifications (e.g. persistent_notification.create)."
-        }
-      }
-    },
-    "abort": {
-      "already_configured": "Simple Heating Manager is already configured."
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Simple Heating Manager",
-        "description": "What would you like to do?",
-        "data": {
-          "next_action": "Action"
-        }
-      },
-      "settings": {
-        "title": "Settings",
-        "description": "Edit global settings.",
-        "data": {
-          "cv_switch_1": "Boiler switch 1",
-          "cv_switch_2": "Boiler switch 2",
-          "notification_service": "Notification service"
-        },
-        "data_description": {
-          "cv_switch_1": "Primary switch that controls the boiler.",
-          "cv_switch_2": "Optional secondary boiler switch.",
-          "notification_service": "Service for notifications."
         }
       },
       "add_room": {
@@ -62,12 +34,32 @@
           "window_sensors": "Binary sensors that detect open windows.",
           "sensor_mode_entity": "Select entity to switch TRV between internal/external sensor.",
           "room_switch": "Optional switch to turn on when room needs heat (e.g. floor heating pump).",
-          "check_interval": "How often to check windows and update CV switch (in seconds)."
+          "check_interval": "How often to check and update (in seconds)."
+        }
+      }
+    },
+    "error": {
+      "room_already_exists": "A room with this name already exists."
+    }
+  },
+  "options": {
+    "step": {
+      "settings": {
+        "title": "Settings",
+        "description": "Edit global settings.",
+        "data": {
+          "cv_switch_1": "Boiler switch 1",
+          "cv_switch_2": "Boiler switch 2",
+          "notification_service": "Notification service"
+        },
+        "data_description": {
+          "cv_switch_1": "Primary switch that controls the boiler.",
+          "cv_switch_2": "Optional secondary boiler switch.",
+          "notification_service": "Service for notifications."
         }
       },
       "edit_room": {
         "title": "Edit room",
-        "description": "TRV temperature: {trv_temp} (target: {trv_target})\nTRV internal sensor: {local_temp}\nExternal sensor: {sensor_temp}\nSensor mode: {sensor_mode}",
         "data": {
           "name": "Room name",
           "trv_entity": "TRV (climate entity)",
@@ -75,9 +67,7 @@
           "window_sensors": "Window sensors",
           "sensor_mode_entity": "Sensor mode entity",
           "room_switch": "Room switch",
-          "check_interval": "Check interval (seconds)",
-          "push_sensor_mode": "Push sensor mode to external",
-          "delete_room": "Delete this room"
+          "check_interval": "Check interval (seconds)"
         },
         "data_description": {
           "name": "A unique name for this room.",
@@ -86,9 +76,7 @@
           "window_sensors": "Binary sensors that detect open windows.",
           "sensor_mode_entity": "Select entity to switch TRV between internal/external sensor.",
           "room_switch": "Optional switch to turn on when room needs heat (e.g. floor heating pump).",
-          "check_interval": "How often to check windows and update CV switch (in seconds).",
-          "push_sensor_mode": "Enable to force the TRV sensor mode to 'external' now.",
-          "delete_room": "Enable to permanently remove this room."
+          "check_interval": "How often to check and update (in seconds)."
         }
       }
     },

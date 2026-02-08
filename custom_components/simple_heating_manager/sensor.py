@@ -1,9 +1,7 @@
 """Sensor platform for Simple Heating Manager.
 
-Creates sensors per room so rooms appear as devices under the integration hub.
-
-Entity categories control how HA groups them on the device page:
-- Controls (no category): Status, Window, Room switch
+Each room entry creates sensors grouped by entity_category:
+- Controls: Window, Room switch
 - Diagnostic: TRV temperature, Target, External, Sensor mode, Battery
 """
 
@@ -25,15 +23,14 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 
-from .const import DOMAIN
+from .const import CONF_ENTRY_TYPE, DOMAIN, ENTRY_TYPE_ROOM
 
 _LOGGER = logging.getLogger(__name__)
 
 
 def _device_info(entry: ConfigEntry, room) -> DeviceInfo:
-    """Return shared DeviceInfo for a room."""
     return DeviceInfo(
-        identifiers={(DOMAIN, f"{entry.entry_id}_{room.name}")},
+        identifiers={(DOMAIN, entry.entry_id)},
         name=room.name,
         manufacturer="Simple Heating Manager",
         model="Room",
@@ -41,34 +38,22 @@ def _device_info(entry: ConfigEntry, room) -> DeviceInfo:
 
 
 def _find_battery_entity(hass: HomeAssistant, trv_entity_id: str) -> str | None:
-    """Find the battery sensor for the same device as the TRV."""
     ent_reg = er.async_get(hass)
-
     trv_entry = ent_reg.async_get(trv_entity_id)
     if trv_entry is None or trv_entry.device_id is None:
-        _LOGGER.debug("Battery search: TRV %s not in entity registry", trv_entity_id)
         return None
 
     device_entities = er.async_entries_for_device(ent_reg, trv_entry.device_id)
 
-    # Method 1: search by device_class
     for entity in device_entities:
         dc = entity.original_device_class or entity.device_class
         if dc is not None and str(dc) == "battery":
-            _LOGGER.debug("Battery found via device_class: %s", entity.entity_id)
             return entity.entity_id
 
-    # Method 2: fallback - search by entity_id containing "battery"
     for entity in device_entities:
         if "battery" in entity.entity_id:
-            _LOGGER.debug("Battery found via entity_id pattern: %s", entity.entity_id)
             return entity.entity_id
 
-    _LOGGER.debug(
-        "Battery search: no battery entity on device %s (checked %d entities)",
-        trv_entry.device_id,
-        len(device_entities),
-    )
     return None
 
 
@@ -77,75 +62,68 @@ async def async_setup_entry(
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up room sensors."""
-    data = hass.data[DOMAIN][entry.entry_id]
-    rooms = data["rooms"]
+    if entry.data.get(CONF_ENTRY_TYPE) != ENTRY_TYPE_ROOM:
+        return
+
+    room_data = hass.data[DOMAIN]["rooms"].get(entry.entry_id)
+    if not room_data:
+        return
+    room = room_data["room"]
 
     entities = []
-    for room in rooms:
-        # Controls section
-        if room.window_sensors:
-            entities.append(RoomWindowSensor(entry, room))
-        if room.room_switch:
-            entities.append(RoomSwitchStateSensor(entry, room))
 
-        # Diagnostic section
-        entities.append(RoomTrvTemperatureSensor(entry, room))
-        entities.append(RoomTargetTemperatureSensor(entry, room))
-        entities.append(RoomExternalTemperatureSensor(entry, room))
-        if room.sensor_mode_entity:
-            entities.append(RoomSensorModeSensor(entry, room))
+    # Controls
+    if room.window_sensors:
+        entities.append(RoomWindowSensor(entry, room))
+    if room.room_switch:
+        entities.append(RoomSwitchStateSensor(entry, room))
 
-        # Battery: find via device registry
-        battery_entity = _find_battery_entity(hass, room.trv_entity)
-        if battery_entity:
-            entities.append(RoomBatterySensor(entry, room, battery_entity))
-        else:
-            _LOGGER.debug(
-                "Room '%s': no battery entity found for %s",
-                room.name,
-                room.trv_entity,
-            )
+    # Diagnostic
+    entities.append(RoomTrvTemperatureSensor(entry, room))
+    entities.append(RoomTargetTemperatureSensor(entry, room))
+    entities.append(RoomExternalTemperatureSensor(entry, room))
+    if room.sensor_mode_entity:
+        entities.append(RoomSensorModeSensor(entry, room))
+
+    battery_entity = _find_battery_entity(hass, room.trv_entity)
+    if battery_entity:
+        entities.append(RoomBatterySensor(entry, room, battery_entity))
 
     async_add_entities(entities)
 
 
-# ── Controls (no entity_category) ─────────────────────────────
+# ── Controls ───────────────────────────────────────────────────
 
 
 class RoomWindowSensor(SensorEntity):
-    """Sensor showing window open/closed status."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_icon = "mdi:window-closed-variant"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_window"
+        self._attr_unique_id = f"{entry.entry_id}_window"
         self._attr_name = "Window"
         self._attr_native_value = "Closed"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        any_open = False
-        for sensor_id in self._room.window_sensors:
-            state = self.hass.states.get(sensor_id)
-            if state is not None and state.state == "on":
-                any_open = True
-                break
+    def _update_state(self, _now=None):
+        any_open = any(
+            (s := self.hass.states.get(sid)) is not None and s.state == "on"
+            for sid in self._room.window_sensors
+        )
         self._attr_native_value = "Open" if any_open else "Closed"
         self._attr_icon = (
             "mdi:window-open-variant" if any_open
@@ -155,31 +133,29 @@ class RoomWindowSensor(SensorEntity):
 
 
 class RoomSwitchStateSensor(SensorEntity):
-    """Sensor showing room switch state (on/off)."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_icon = "mdi:power-plug"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_switch_state"
+        self._attr_unique_id = f"{entry.entry_id}_switch_state"
         self._attr_name = "Room switch"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
+    def _update_state(self, _now=None):
         state = self.hass.states.get(self._room.room_switch)
         if state is not None and state.state not in ("unknown", "unavailable"):
             self._attr_native_value = state.state.capitalize()
@@ -192,12 +168,10 @@ class RoomSwitchStateSensor(SensorEntity):
         self.async_write_ha_state()
 
 
-# ── Diagnostic (entity_category = DIAGNOSTIC) ─────────────────
+# ── Diagnostic ─────────────────────────────────────────────────
 
 
 class RoomTrvTemperatureSensor(SensorEntity):
-    """Sensor showing TRV current temperature."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -206,43 +180,39 @@ class RoomTrvTemperatureSensor(SensorEntity):
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_icon = "mdi:thermometer"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_trv_temp"
+        self._attr_unique_id = f"{entry.entry_id}_trv_temp"
         self._attr_name = "TRV temperature"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        trv_state = self.hass.states.get(self._room.trv_entity)
-        if trv_state is not None:
-            current = trv_state.attributes.get("current_temperature")
-            if current is not None:
+    def _update_state(self, _now=None):
+        trv = self.hass.states.get(self._room.trv_entity)
+        val = None
+        if trv is not None:
+            c = trv.attributes.get("current_temperature")
+            if c is not None:
                 try:
-                    self._attr_native_value = round(float(current), 1)
+                    val = round(float(c), 1)
                 except (ValueError, TypeError):
-                    self._attr_native_value = None
-            else:
-                self._attr_native_value = None
-        else:
-            self._attr_native_value = None
+                    pass
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 
 class RoomTargetTemperatureSensor(SensorEntity):
-    """Sensor showing TRV target temperature."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -251,43 +221,39 @@ class RoomTargetTemperatureSensor(SensorEntity):
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_icon = "mdi:thermometer-chevron-up"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_target_temp"
+        self._attr_unique_id = f"{entry.entry_id}_target_temp"
         self._attr_name = "Target temperature"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        trv_state = self.hass.states.get(self._room.trv_entity)
-        if trv_state is not None:
-            target = trv_state.attributes.get("temperature")
-            if target is not None:
+    def _update_state(self, _now=None):
+        trv = self.hass.states.get(self._room.trv_entity)
+        val = None
+        if trv is not None:
+            t = trv.attributes.get("temperature")
+            if t is not None:
                 try:
-                    self._attr_native_value = round(float(target), 1)
+                    val = round(float(t), 1)
                 except (ValueError, TypeError):
-                    self._attr_native_value = None
-            else:
-                self._attr_native_value = None
-        else:
-            self._attr_native_value = None
+                    pass
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 
 class RoomExternalTemperatureSensor(SensorEntity):
-    """Sensor showing external temperature sensor reading."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -296,80 +262,70 @@ class RoomExternalTemperatureSensor(SensorEntity):
     _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
     _attr_icon = "mdi:thermometer-lines"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_ext_temp"
+        self._attr_unique_id = f"{entry.entry_id}_ext_temp"
         self._attr_name = "External temperature"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        sensor_state = self.hass.states.get(self._room.temp_sensor)
-        if sensor_state is not None and sensor_state.state not in (
-            "unknown", "unavailable",
-        ):
+    def _update_state(self, _now=None):
+        s = self.hass.states.get(self._room.temp_sensor)
+        val = None
+        if s is not None and s.state not in ("unknown", "unavailable"):
             try:
-                self._attr_native_value = round(
-                    float(sensor_state.state), 1
-                )
+                val = round(float(s.state), 1)
             except (ValueError, TypeError):
-                self._attr_native_value = None
-        else:
-            self._attr_native_value = None
+                pass
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 
 class RoomSensorModeSensor(SensorEntity):
-    """Sensor showing TRV sensor mode (internal/external)."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
     _attr_icon = "mdi:swap-horizontal"
 
-    def __init__(self, entry: ConfigEntry, room) -> None:
+    def __init__(self, entry, room):
         self._room = room
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_sensor_mode"
+        self._attr_unique_id = f"{entry.entry_id}_sensor_mode"
         self._attr_name = "Sensor mode"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=30)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        mode_state = self.hass.states.get(self._room.sensor_mode_entity)
-        if mode_state is not None and mode_state.state not in (
-            "unknown", "unavailable",
-        ):
-            self._attr_native_value = mode_state.state
-        else:
-            self._attr_native_value = None
+    def _update_state(self, _now=None):
+        s = self.hass.states.get(self._room.sensor_mode_entity)
+        val = None
+        if s is not None and s.state not in ("unknown", "unavailable"):
+            val = s.state
+        self._attr_native_value = val
         self.async_write_ha_state()
 
 
 class RoomBatterySensor(SensorEntity):
-    """Sensor showing TRV battery percentage."""
-
     _attr_has_entity_name = True
     _attr_should_poll = False
     _attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -377,34 +333,32 @@ class RoomBatterySensor(SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_native_unit_of_measurement = "%"
 
-    def __init__(self, entry: ConfigEntry, room, battery_entity_id: str) -> None:
+    def __init__(self, entry, room, battery_entity_id: str):
         self._room = room
         self._battery_entity = battery_entity_id
-        self._attr_unique_id = f"{entry.entry_id}_{room.name}_battery"
+        self._attr_unique_id = f"{entry.entry_id}_battery"
         self._attr_name = "TRV battery"
         self._attr_device_info = _device_info(entry, room)
         self._unsub = None
 
-    async def async_added_to_hass(self) -> None:
+    async def async_added_to_hass(self):
         self._unsub = async_track_time_interval(
             self.hass, self._update_state, timedelta(seconds=300)
         )
         self._update_state()
 
-    async def async_will_remove_from_hass(self) -> None:
+    async def async_will_remove_from_hass(self):
         if self._unsub:
             self._unsub()
 
     @callback
-    def _update_state(self, _now=None) -> None:
-        state = self.hass.states.get(self._battery_entity)
-        if state is not None and state.state not in (
-            "unknown", "unavailable",
-        ):
+    def _update_state(self, _now=None):
+        s = self.hass.states.get(self._battery_entity)
+        val = None
+        if s is not None and s.state not in ("unknown", "unavailable"):
             try:
-                self._attr_native_value = round(float(state.state))
+                val = round(float(s.state))
             except (ValueError, TypeError):
-                self._attr_native_value = None
-        else:
-            self._attr_native_value = None
+                pass
+        self._attr_native_value = val
         self.async_write_ha_state()
