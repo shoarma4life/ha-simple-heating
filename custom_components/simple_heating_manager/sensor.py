@@ -49,6 +49,10 @@ async def async_setup_entry(
         entities.append(RoomTargetTemperatureSensor(entry, room))
         entities.append(RoomExternalTemperatureSensor(entry, room))
         entities.append(RoomSensorModeSensor(entry, room))
+        if room.window_sensors:
+            entities.append(RoomWindowSensor(entry, room))
+        if room.room_switch:
+            entities.append(RoomSwitchStateSensor(entry, room))
 
     async_add_entities(entities)
 
@@ -292,6 +296,96 @@ class RoomSensorModeSensor(SensorEntity):
             "unknown", "unavailable",
         ):
             self._attr_native_value = mode_state.state
+        else:
+            self._attr_native_value = None
+        self.async_write_ha_state()
+
+
+class RoomWindowSensor(SensorEntity):
+    """Sensor showing window open/closed status."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:window-closed-variant"
+
+    def __init__(self, entry: ConfigEntry, room) -> None:
+        """Initialize the sensor."""
+        self._room = room
+        self._attr_unique_id = f"{entry.entry_id}_{room.name}_window"
+        self._attr_name = "Window"
+        self._attr_native_value = "Closed"
+        self._attr_device_info = _device_info(entry, room)
+        self._unsub = None
+
+    async def async_added_to_hass(self) -> None:
+        """Start periodic updates when added."""
+        self._unsub = async_track_time_interval(
+            self.hass, self._update_state, timedelta(seconds=30)
+        )
+        self._update_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up on removal."""
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _update_state(self, _now=None) -> None:
+        """Update from window sensors."""
+        any_open = False
+        for sensor_id in self._room.window_sensors:
+            state = self.hass.states.get(sensor_id)
+            if state is not None and state.state == "on":
+                any_open = True
+                break
+
+        self._attr_native_value = "Open" if any_open else "Closed"
+        self._attr_icon = (
+            "mdi:window-open-variant" if any_open
+            else "mdi:window-closed-variant"
+        )
+        self.async_write_ha_state()
+
+
+class RoomSwitchStateSensor(SensorEntity):
+    """Sensor showing room switch state (on/off)."""
+
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+    _attr_icon = "mdi:power-plug"
+
+    def __init__(self, entry: ConfigEntry, room) -> None:
+        """Initialize the sensor."""
+        self._room = room
+        self._attr_unique_id = f"{entry.entry_id}_{room.name}_switch_state"
+        self._attr_name = "Room switch"
+        self._attr_device_info = _device_info(entry, room)
+        self._unsub = None
+
+    async def async_added_to_hass(self) -> None:
+        """Start periodic updates when added."""
+        self._unsub = async_track_time_interval(
+            self.hass, self._update_state, timedelta(seconds=30)
+        )
+        self._update_state()
+
+    async def async_will_remove_from_hass(self) -> None:
+        """Clean up on removal."""
+        if self._unsub:
+            self._unsub()
+
+    @callback
+    def _update_state(self, _now=None) -> None:
+        """Update from room switch entity."""
+        state = self.hass.states.get(self._room.room_switch)
+        if state is not None and state.state not in (
+            "unknown", "unavailable",
+        ):
+            self._attr_native_value = state.state.capitalize()
+            self._attr_icon = (
+                "mdi:power-plug" if state.state == "on"
+                else "mdi:power-plug-off"
+            )
         else:
             self._attr_native_value = None
         self.async_write_ha_state()
