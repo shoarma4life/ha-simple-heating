@@ -1,0 +1,116 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Simple Heating Manager",
+        "description": "Configureer je ketelschakelaars en notificatieservice.",
+        "data": {
+          "cv_switch_1": "CV schakelaar 1",
+          "cv_switch_2": "CV schakelaar 2",
+          "notification_service": "Notificatieservice"
+        },
+        "data_description": {
+          "cv_switch_1": "Primaire schakelaar voor de ketel.",
+          "cv_switch_2": "Optionele tweede ketelschakelaar.",
+          "notification_service": "Service voor meldingen (bijv. persistent_notification.create)."
+        }
+      },
+      "add_room": {
+        "title": "Kamer toevoegen",
+        "description": "Configureer een nieuwe kamer.",
+        "data": {
+          "name": "Kamernaam",
+          "trv_entity": "TRV (climate entiteit)",
+          "temp_sensor": "Externe temperatuursensor",
+          "window_sensors": "Raamsensoren",
+          "sensor_mode_entity": "Sensor modus entiteit",
+          "room_switch": "Kamerschakelaar",
+          "check_interval": "Controle-interval (seconden)"
+        },
+        "data_description": {
+          "name": "Een unieke naam voor deze kamer.",
+          "trv_entity": "De climate entiteit van de TRV die aangestuurd wordt.",
+          "temp_sensor": "Externe temperatuursensor om naar de TRV te sturen.",
+          "window_sensors": "Binaire sensoren die open ramen detecteren.",
+          "sensor_mode_entity": "Select entiteit om TRV te wisselen tussen interne/externe sensor.",
+          "room_switch": "Optionele schakelaar die aan gaat als de kamer warmte nodig heeft (bijv. vloerverwarmingspomp).",
+          "check_interval": "Hoe vaak er gecontroleerd en bijgewerkt wordt (in seconden)."
+        }
+      }
+    },
+    "error": {
+      "room_already_exists": "Er bestaat al een kamer met deze naam."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Simple Heating Manager",
+        "menu_options": {
+          "settings": "Instellingen bewerken",
+          "add_room": "Kamer toevoegen"
+        }
+      },
+      "settings": {
+        "title": "Instellingen",
+        "description": "Globale instellingen bewerken.",
+        "data": {
+          "cv_switch_1": "CV schakelaar 1",
+          "cv_switch_2": "CV schakelaar 2",
+          "notification_service": "Notificatieservice"
+        },
+        "data_description": {
+          "cv_switch_1": "Primaire schakelaar voor de ketel.",
+          "cv_switch_2": "Optionele tweede ketelschakelaar.",
+          "notification_service": "Service voor meldingen."
+        }
+      },
+      "add_room": {
+        "title": "Kamer toevoegen",
+        "description": "Configureer een nieuwe kamer.",
+        "data": {
+          "name": "Kamernaam",
+          "trv_entity": "TRV (climate entiteit)",
+          "temp_sensor": "Externe temperatuursensor",
+          "window_sensors": "Raamsensoren",
+          "sensor_mode_entity": "Sensor modus entiteit",
+          "room_switch": "Kamerschakelaar",
+          "check_interval": "Controle-interval (seconden)"
+        },
+        "data_description": {
+          "name": "Een unieke naam voor deze kamer.",
+          "trv_entity": "De climate entiteit van de TRV die aangestuurd wordt.",
+          "temp_sensor": "Externe temperatuursensor om naar de TRV te sturen.",
+          "window_sensors": "Binaire sensoren die open ramen detecteren.",
+          "sensor_mode_entity": "Select entiteit om TRV te wisselen tussen interne/externe sensor.",
+          "room_switch": "Optionele schakelaar die aan gaat als de kamer warmte nodig heeft (bijv. vloerverwarmingspomp).",
+          "check_interval": "Hoe vaak er gecontroleerd en bijgewerkt wordt (in seconden)."
+        }
+      },
+      "edit_room": {
+        "title": "Kamer bewerken",
+        "data": {
+          "name": "Kamernaam",
+          "trv_entity": "TRV (climate entiteit)",
+          "temp_sensor": "Externe temperatuursensor",
+          "window_sensors": "Raamsensoren",
+          "sensor_mode_entity": "Sensor modus entiteit",
+          "room_switch": "Kamerschakelaar",
+          "check_interval": "Controle-interval (seconden)"
+        },
+        "data_description": {
+          "name": "Een unieke naam voor deze kamer.",
+          "trv_entity": "De climate entiteit van de TRV die aangestuurd wordt.",
+          "temp_sensor": "Externe temperatuursensor om naar de TRV te sturen.",
+          "window_sensors": "Binaire sensoren die open ramen detecteren.",
+          "sensor_mode_entity": "Select entiteit om TRV te wisselen tussen interne/externe sensor.",
+          "room_switch": "Optionele schakelaar die aan gaat als de kamer warmte nodig heeft (bijv. vloerverwarmingspomp).",
+          "check_interval": "Hoe vaak er gecontroleerd en bijgewerkt wordt (in seconden)."
+        }
+      }
+    },
+    "error": {
+      "room_already_exists": "Er bestaat al een kamer met deze naam."
+    }
+  }
+}
