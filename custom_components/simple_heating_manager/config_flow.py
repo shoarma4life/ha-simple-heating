@@ -43,18 +43,31 @@ def _room_schema(defaults: dict | None = None) -> vol.Schema:
     else:
         fields[vol.Required(CONF_ROOM_NAME)] = selector.TextSelector()
 
-    fields[vol.Required(
-        CONF_TRV_ENTITY, default=d.get(CONF_TRV_ENTITY)
-    )] = selector.EntitySelector(
-        selector.EntitySelectorConfig(domain="climate")
-    )
-    fields[vol.Required(
-        CONF_TEMP_SENSOR, default=d.get(CONF_TEMP_SENSOR)
-    )] = selector.EntitySelector(
-        selector.EntitySelectorConfig(
-            domain="sensor", device_class="temperature"
+    if CONF_TRV_ENTITY in d:
+        fields[vol.Required(
+            CONF_TRV_ENTITY, default=d[CONF_TRV_ENTITY]
+        )] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
         )
-    )
+    else:
+        fields[vol.Required(CONF_TRV_ENTITY)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(domain="climate")
+        )
+
+    if CONF_TEMP_SENSOR in d:
+        fields[vol.Required(
+            CONF_TEMP_SENSOR, default=d[CONF_TEMP_SENSOR]
+        )] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor", device_class="temperature"
+            )
+        )
+    else:
+        fields[vol.Required(CONF_TEMP_SENSOR)] = selector.EntitySelector(
+            selector.EntitySelectorConfig(
+                domain="sensor", device_class="temperature"
+            )
+        )
     fields[vol.Optional(
         CONF_WINDOW_SENSORS,
         description={"suggested_value": d.get(CONF_WINDOW_SENSORS)},
